@@ -46,6 +46,15 @@ KM Madraie,KSM,Dourn-Kêr,1100000,1905,#12b39b,95,95,0.460,0.340,assets/badges/m
 
 ## 2) `jogadores.csv`
 
+> **Sem cabeçalho também funciona.** O importador descobre o formato pela
+> coluna de posição (`GOL/ZAG/LAT/VOL/MEI/PON/ATA`):
+> - posição na **2ª** coluna → `name,pos,age,nat,overall,potential`
+> - posição na **3ª** coluna → `club,name,pos,age,nat,overall,potential`
+>
+> Se o arquivo **não tiver a coluna `club`**, os jogadores vão para o clube
+> **selecionado na lista** do editor — ou para o clube com o mesmo nome do
+> arquivo (ex.: `KS Madraie.csv` → clube "KS Madraie").
+
 O jeito rápido: informe só `overall` e a **posição** — os 12 atributos são
 gerados com o perfil da posição e calibrados para bater com esse overall.
 
@@ -68,7 +77,7 @@ KM Madraie,Marcelo Andrade,MEI,23,br,83,93,82,90,91,74
 | `club` | nome ou sigla do clube (precisa existir) |
 | `pos` | `GOL`, `ZAG`, `LAT`, `VOL`, `MEI`, `PON`, `ATA` |
 | `age` | 15–45 |
-| `nat` | código do país: `dou` (Dournéa), `br`, `pt`, `jp`, `ar`, `es`, `fr`… (196 países) |
+| `nat` | código do país: `dou` (Dournéa), `br`, `pt`, `jp`, `ar`, `es`, `fr`… (196 países). **Código inventado** (ex.: `ull`, `gua`) vira uma nação personalizada com bandeira 🏴 em vez de sumir |
 | `overall` | 20–99 |
 | `potential` | teto de evolução (≥ overall) |
 | atributos | `pace, stamina, strength, tackling, marking, passing, vision, dribbling, technique, finishing, positioning, goalkeeping` (20–99) |
@@ -98,6 +107,28 @@ automaticamente, para sempre ser possível escalar um XI.
   ]
 }
 ```
+
+---
+
+---
+
+## Onde os imports ficam salvos?
+
+No **IndexedDB do navegador**, na chave `worldTemplate` (banco `onze-db`,
+store `data`) — junto com todas as edições do editor. **Não é um arquivo.**
+É por isso que o mundo continua igual quando você reabre o jogo.
+
+O save da *carreira* é separado (chave `auto`), então mexer no mundo não
+apaga a temporada em andamento.
+
+### Deu errado? Como voltar
+1. **↩️ Desfazer importação** — volta ao estado logo antes do último
+   import/remoção (o editor guarda um ponto de retorno automático).
+2. **🧹 Limpar clubes vazios** — apaga de uma vez os clubes com nome
+   automático `Clube 22`, `Clube 23`… criados por engano.
+3. **🗑 Excluir clube** — no painel do clube, apaga um específico.
+4. **🎲 Aleatório** — descarta o mundo salvo e sorteia outro do zero.
+5. Costume saudável: **⤓ Exportar** antes de importar em massa.
 
 ---
 
