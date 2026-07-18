@@ -1,0 +1,4 @@
+name,short,city,cityPop,founded,color,prestige,fans,x,y,badge,stadium,capacity,proximity,enclosure,pitch,kitPattern,kitShirt,kitShorts,kitSocks,kitDetail
+KM Madraie,KSM,Dourn-Kêr,1100000,1905,#12b39b,95,95,0.460,0.340,assets/badges/madraie.png,Stade de Dourn-Kêr,71300,78,62,88,stripes,#12b39b,#ffffff,#12b39b,#ffffff
+KS Korsaer,KSR,Korsaer,540000,1912,#e8641c,82,80,0.520,0.300,,Stade Korsaer,44000,70,55,84,hoops,#e8641c,#1a1a1a,#e8641c,#1a1a1a
+Racing Dournquer,RKV,Dournquer,610000,1898,#1f6feb,88,86,0.560,0.250,,Parc Dournquer,52000,84,74,86,solid,#1f6feb,#ffffff,#1f6feb,#ffffff

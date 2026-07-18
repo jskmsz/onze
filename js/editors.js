@@ -197,8 +197,10 @@ export function openWorldEditor(world, opts={}){
         <button id="weSaveAll">💾 Salvar mundo</button>
         <button id="weExport">⤓ Exportar</button>
         <button id="weImport">⤒ Importar</button>
+        <button id="weBulk" title="Importar clubes/jogadores de CSV ou JSON">📥 Importar CSV/JSON</button>
         <button id="weRandom" title="Descarta o mundo salvo e sorteia outro">🎲 Aleatório</button>
         <input type="file" id="weFile" accept=".json,application/json" hidden>
+        <input type="file" id="weBulkFile" accept=".csv,.json,text/csv,application/json" multiple hidden>
       </span>
     </div>
     <div class="cb-wrap">
@@ -238,6 +240,18 @@ export function openWorldEditor(world, opts={}){
     }catch(err){ flash("⚠️ Arquivo inválido: "+err.message); }
   };
   $("weRandom").onclick=()=>{ opts.onRandom && opts.onRandom(); };
+  $("weBulk").onclick=()=>$("weBulkFile").click();
+  $("weBulkFile").onchange=async e=>{
+    const files=[...e.target.files]; if(!files.length) return;
+    const payload=[]; for(const f of files) payload.push({name:f.name, text:await f.text()});
+    opts.onBulk && opts.onBulk(payload, rep=>{
+      flash(`✅ ${rep.clubs} clube(s) e ${rep.players} jogador(es) importados`
+        + (rep.warnings.length?` · ${rep.warnings.length} aviso(s): ${rep.warnings[0]}`:""));
+      sel=world.clubs[world.clubs.length-1]?.id ?? sel;
+      render();
+    });
+    e.target.value="";
+  };
 
   const listar=()=>{
     $("weList").innerHTML=world.clubs.map(c=>`

@@ -6,6 +6,7 @@ import * as S from "./storage.js";
 import * as K from "./kit.js";
 import * as BR from "./brands.js";
 import * as ED from "./editors.js";
+import * as IMP from "./importer.js";
 import { ATTR_PT, STAFF_ROLES } from "./core.js";
 
 let world, userId, view="tabela", calRound=0, finTab="overview", market=null;
@@ -1694,6 +1695,12 @@ function openEditor(){
       saveWorldTemplate(window.__draft); $("modalHost").innerHTML=""; openEditor(); },
     onRandom:()=>{ clearWorldTemplate(); window.__draft=C.generateWorld(); migrate(window.__draft);
       $("modalHost").innerHTML=""; openEditor(); toast("Mundo aleatório gerado"); },
+    onBulk:(files, done)=>{
+      const w=draftWorld();
+      const rep=IMP.importData(w, files);
+      migrate(w); saveWorldTemplate(w);
+      done(rep);
+    },
   });
 }
 on("mEditor","onclick",openEditor);
