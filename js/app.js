@@ -3,6 +3,8 @@
    ===================================================================== */
 import * as C from "./core.js";
 import * as S from "./storage.js";
+import * as K from "./kit.js";
+import * as BR from "./brands.js";
 import { ATTR_PT, STAFF_ROLES } from "./core.js";
 
 let world, userId, view="tabela", calRound=0, finTab="overview", market=null;
@@ -90,6 +92,10 @@ function migrate(w){
     c.proficiency = c.proficiency || {defense:50, attack:50, possession:50, setPieces:50, penalties:50};
     if(c.badge===undefined) c.badge=null;
     if(c.prestige==null) c.prestige=c.rep||55;
+    c.sponsors = c.sponsors || {};
+    if(!c.kitDesign)    c.kitDesign    = K.defaultKitDesign(c,false);
+    if(!c.kitDesignAlt) c.kitDesignAlt = K.defaultKitDesign(c,true);
+    if(!Object.keys(c.sponsors).length) C.autoSponsor(c, 0.8);
     for(const v of c.venues){ if(v.pitch==null) v.pitch=Math.round(70+Math.random()*22); if(!v.pitchCare) v.pitchCare="normal"; }
     for(const p of c.squad){ if(p.condition==null) p.condition=100; if(!p.nat) p.nat="dou"; }
   }
@@ -416,47 +422,97 @@ function renderSpotPanel(c, v, opp){
   if($("spMark")) $("spMark").onchange=ev=>{ st.markId=ev.target.value?+ev.target.value:null; renderLineup(v); };
 }
 
-/* ---------- Editor de uniforme ---------- */
+/* ---------- Editor de uniforme (canvas) ---------- */
+let kitWhich="kitDesign", kitSlotSel=null;
 function openKitEditor(v){
   const c=me(), host=$("modalHost");
-  const patterns=[["solid","Sólida"],["stripes","Listras"],["hoops","Aros"],["sash","Faixa diagonal"],["halves","Metades"]];
-  const patOpts=patterns.map(([k,l])=>`<option value="${k}" ${c.kit.pattern===k?"selected":""}>${l}</option>`).join("");
+  if(!c.kitDesign) c.kitDesign=K.defaultKitDesign(c,false);
+  if(!c.kitDesignAlt) c.kitDesignAlt=K.defaultKitDesign(c,true);
   const modal=el("div","modal");
-  modal.innerHTML=`<div class="box" style="width:min(440px,92vw)">
-    <button class="close" id="kClose">✕ Fechar</button>
+  modal.innerHTML=`<div class="box kitbox"><button class="close" id="kClose">✕ Fechar</button>
     <h2>Uniforme — ${c.name}</h2>
-    <div style="display:flex;gap:18px;align-items:center;margin-top:12px">
-      <svg id="kitPrev" viewBox="0 0 34 34" style="width:120px;flex:none;background:#2f6b34;border-radius:10px"></svg>
-      <div style="flex:1">
-        <div class="slider-row"><label>Padrão</label><select id="kPat" style="width:100%">${patOpts}</select></div>
-        <div class="slider-row" style="display:flex;justify-content:space-between;align-items:center"><label>Cor principal</label><input type="color" id="kPri" value="${c.kit.primary}"></div>
-        <div class="slider-row" style="display:flex;justify-content:space-between;align-items:center"><label>Cor secundária</label><input type="color" id="kSec" value="${c.kit.secondary}"></div>
-      </div>
+    <div class="kit-tabs">
+      <div class="tab ${kitWhich==="kitDesign"?"active":""}" data-k="kitDesign">1º uniforme</div>
+      <div class="tab ${kitWhich==="kitDesignAlt"?"active":""}" data-k="kitDesignAlt">2º uniforme</div>
     </div>
-    <div class="shirt-upload"><label>Ou envie uma imagem de camisa (substitui o padrão)</label>
-      <input type="file" id="kImg" accept="image/*">
-      ${c.kit.image?'<button id="kImgClear" style="margin-top:8px">Remover imagem</button>':''}</div>
-    <div class="shirt-upload" style="margin-top:10px">
-      <label>Escudo do clube ${c.badge?'':'(caixinha de cor por enquanto)'}</label>
-      <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
-        <span id="badgePrev">${badgeHTML(c,40)}</span>
-        <input type="file" id="kBadge" accept="image/*" style="flex:1">
-        ${c.badge?'<button id="kBadgeClear">Remover</button>':''}</div></div>`;
+    <div class="kit-wrap">
+      <div class="kit-canvas"><canvas id="kitCv" width="680" height="800"></canvas>
+        <div class="sub" id="kitNote"></div></div>
+      <div class="kit-ctl" id="kitCtl"></div>
+    </div></div>`;
   modal.onclick=e=>{ if(e.target===modal) close(); };
   host.appendChild(modal);
-  const prev=()=>{ const s=$("kitPrev"); s.innerHTML=""; drawJersey(s,17,16,c.kit,"prev",6); };
-  prev();
   const close=()=>{ host.innerHTML=""; renderLineup(v); rerender(); };
   $("kClose").onclick=close;
-  $("kPat").onchange=e=>{ c.kit.pattern=e.target.value; prev(); };
-  $("kPri").oninput=e=>{ c.kit.primary=e.target.value; prev(); };
-  $("kSec").oninput=e=>{ c.kit.secondary=e.target.value; prev(); };
-  $("kImg").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader();
-    rd.onload=()=>{ c.kit.image=rd.result; host.innerHTML=""; openKitEditor(v); }; rd.readAsDataURL(f); };
-  if($("kImgClear")) $("kImgClear").onclick=()=>{ c.kit.image=null; host.innerHTML=""; openKitEditor(v); };
+  modal.querySelectorAll("[data-k]").forEach(t=> t.onclick=()=>{ kitWhich=t.dataset.k; host.innerHTML=""; openKitEditor(v); });
+  buildKitControls(c, v);
+  paintKit(c);
+}
+function curDesign(c){ return c[kitWhich] || (c[kitWhich]=K.defaultKitDesign(c, kitWhich==="kitDesignAlt")); }
+
+async function paintKit(c){
+  const cv=$("kitCv"); if(!cv) return;
+  const ok=await K.renderKit(cv, c, curDesign(c), {highlight:kitSlotSel});
+  const n=$("kitNote");
+  if(n) n.innerHTML = ok
+    ? `Modelo: <b>${K.KIT_TEMPLATES[curDesign(c).template].l}</b>`
+    : `⚠️ Coloque os PNGs em <code>onze/assets/kits/</code> como
+       <code>base-lisa.png</code> e <code>base-gola.png</code> para usar seus modelos
+       (desenho simplificado por enquanto).`;
+}
+
+function buildKitControls(c, v){
+  const d=curDesign(c), box=$("kitCtl");
+  const tplOpts=Object.entries(K.KIT_TEMPLATES)
+    .map(([k,t])=>`<option value="${k}" ${d.template===k?"selected":""}>${t.l}</option>`).join("");
+  const patOpts=Object.entries(K.PATTERNS)
+    .map(([k,l])=>`<option value="${k}" ${d.pattern===k?"selected":""}>${l}</option>`).join("");
+  const badgeOpts=Object.entries(K.BADGE_POS)
+    .map(([k,b])=>`<option value="${k}" ${d.badge===k?"selected":""}>${b.l}</option>`).join("");
+  const signed=Object.keys(c.sponsors||{}).filter(k=>BR.SPONSOR_SLOTS[k].area);
+  const tintRows=signed.map(k=>{
+    const b=BR.brandById(c.sponsors[k].brandId);
+    const cur=(d.logoTint&&d.logoTint[k])||"";
+    return `<div class="row2"><label>${BR.SPONSOR_SLOTS[k].l}</label>
+      <span style="display:flex;gap:6px;align-items:center">
+        <input type="color" data-tint="${k}" value="${cur||b.color}">
+        <button data-untint="${k}" title="Cor original da marca">↺</button></span></div>`;
+  }).join("") || `<div class="sub">Nenhum patrocínio no uniforme ainda — assine em <b>Finanças → Patrocínios</b>.</div>`;
+
+  box.innerHTML=`
+    <div class="row2"><label>Modelo</label><select id="kTpl">${tplOpts}</select></div>
+    <div class="row2"><label>Padrão</label><select id="kPat">${patOpts}</select></div>
+    <div class="row2"><label>Camisa</label><input type="color" id="kShirt" value="${d.shirt}"></div>
+    <div class="row2"><label>Detalhe/2ª cor</label><input type="color" id="kDet" value="${d.detail}"></div>
+    <div class="row2"><label>Calção</label><input type="color" id="kShorts" value="${d.shorts}"></div>
+    <div class="row2"><label>Meião</label><input type="color" id="kSocks" value="${d.socks}"></div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
+    <div class="row2"><label>Escudo</label><select id="kBadgePos">${badgeOpts}</select></div>
+    <div class="shirt-upload"><label>Imagem do escudo (PNG)</label>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+        <span>${badgeHTML(c,34)}</span><input type="file" id="kBadge" accept="image/*" style="flex:1">
+        ${c.badge?'<button id="kBadgeClear">✕</button>':''}</div></div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
+    <h3 style="font-size:11px;color:var(--muted);text-transform:uppercase;margin:0 0 6px">Cor dos logos</h3>
+    ${tintRows}`;
+
+  const upd=()=>paintKit(c);
+  $("kTpl").onchange=e=>{ d.template=e.target.value; upd(); };
+  $("kPat").onchange=e=>{ d.pattern=e.target.value; upd(); };
+  $("kShirt").oninput=e=>{ d.shirt=e.target.value; upd(); };
+  $("kDet").oninput=e=>{ d.detail=e.target.value; upd(); };
+  $("kShorts").oninput=e=>{ d.shorts=e.target.value; upd(); };
+  $("kSocks").oninput=e=>{ d.socks=e.target.value; upd(); };
+  $("kBadgePos").onchange=e=>{ d.badge=e.target.value; upd(); };
   $("kBadge").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader();
-    rd.onload=()=>{ c.badge=rd.result; host.innerHTML=""; openKitEditor(v); }; rd.readAsDataURL(f); };
-  if($("kBadgeClear")) $("kBadgeClear").onclick=()=>{ c.badge=null; host.innerHTML=""; openKitEditor(v); };
+    rd.onload=()=>{ c.badge=rd.result; buildKitControls(c,v); paintKit(c); }; rd.readAsDataURL(f); };
+  if($("kBadgeClear")) $("kBadgeClear").onclick=()=>{ c.badge=null; buildKitControls(c,v); paintKit(c); };
+  box.querySelectorAll("[data-tint]").forEach(i=> i.oninput=e=>{
+    d.logoTint=d.logoTint||{}; d.logoTint[e.target.dataset.tint]=e.target.value;
+    kitSlotSel=e.target.dataset.tint; paintKit(c); });
+  box.querySelectorAll("[data-untint]").forEach(b=> b.onclick=()=>{
+    if(d.logoTint) delete d.logoTint[b.dataset.untint];
+    buildKitControls(c,v); paintKit(c); });
 }
 
 /* ---------- Treino ---------- */
@@ -630,7 +686,7 @@ function renderYouth(b,c){
 /* ---------- FINANÇAS (sub-abas) ---------- */
 function renderFinance(v){
   v.innerHTML = `<div class="nav" style="margin:-16px -16px 14px">
-      ${["overview:Visão Geral","staff:Comissão Técnica","stadium:Estádio","sponsor:Patrocínio"]
+      ${["overview:Visão Geral","staff:Comissão Técnica","stadium:Estádio","sponsor:Patrocínios"]
         .map(s=>{const [k,l]=s.split(":"); return `<div class="tab ${finTab===k?"active":""}" data-f="${k}">${l}</div>`;}).join("")}
     </div><div id="finBody"></div>`;
   v.querySelectorAll("[data-f]").forEach(t=> t.onclick=()=>{ finTab=t.dataset.f; renderFinance(v); });
@@ -775,23 +831,52 @@ function renderStadium(body){
   });
 }
 
+const logoImg = (brand,color,h=16)=>
+  `<img src="${BR.brandLogo(brand,color)}" style="height:${h}px;vertical-align:middle;max-width:110px;object-fit:contain">`;
+
 function renderSponsor(body){
-  const c=me(), eff=C.staffEffects(c), opts=C.sponsorOptions(c);
-  const effective=p=>Math.round(p*eff.sponsorMult);
-  let html=`<div class="card"><h3>Patrocínio atual</h3>
-    <div class="line"><span><b>${c.sponsor.name}</b></span><span class="pos">${brl(c.sponsor.perRound)}/rodada</span></div>
-    <div class="line"><span>Com bônus de marketing (${Math.round((eff.sponsorMult-1)*100)}%)</span><span class="pos">${brl(effective(c.sponsor.perRound))}/rodada</span></div>
-    <div class="sub" style="margin-top:8px">Um Diretor de Marketing melhor aumenta esse bônus.</div></div>
-    <div class="card" style="margin-top:12px"><h3>Propostas na mesa</h3>`;
-  opts.forEach((o,i)=>{
-    const isCur=o.name===c.sponsor.name;
-    html+=`<div class="line"><span>${o.name} <span class="sub">— ${o.note}</span></span>
-      <span>${brl(o.perRound)}/rod. ${isCur?'<span class="sub">atual</span>':`<button data-sp="${i}" style="margin-left:8px">Assinar</button>`}</span></div>`;
-  });
-  html+=`</div>`;
+  const c=me(), eff=C.staffEffects(c);
+  const rk=C.reachOf(c.prestige).k;
+  if(!c.sponsorOffers) c.sponsorOffers=BR.makeOffers(c, rk);
+  const total=BR.sponsorIncome(c);
+  let html=`<div class="card"><h3>Resumo</h3>
+    <div class="line"><span>Slots preenchidos</span><span>${Object.keys(c.sponsors||{}).length} / ${BR.SLOT_KEYS.length}</span></div>
+    <div class="line"><span>Receita de patrocínio</span><span class="pos">${brl(total)}/rodada</span></div>
+    <div class="line"><span>Com marketing (+${Math.round((eff.sponsorMult-1)*100)}%)</span><span class="pos">${brl(total*eff.sponsorMult)}/rodada</span></div>
+    <div class="sub" style="margin-top:6px">Seu clube é <b>${BR.REACH_PT[rk]}</b> (${starsHTML(c.prestige)}).
+      Marcas só negociam com clubes de alcance parecido — e slots mais visíveis pagam mais.</div></div>`;
+
+  for(const key of BR.SLOT_KEYS){
+    const S=BR.SPONSOR_SLOTS[key], ct=(c.sponsors||{})[key];
+    const offers=(c.sponsorOffers[key]||[]).filter(o=>!ct);
+    html+=`<div class="card" style="margin-top:10px"><h3>${S.l} <span class="muted" style="text-transform:none">· peso ${S.w.toFixed(2)}</span></h3>`;
+    if(ct){
+      const b=BR.brandById(ct.brandId);
+      html+=`<div class="line"><span>${logoImg(b,null,18)} <b>${b?b.name:"?"}</b>
+          <span class="sub">${b?BR.REACH_PT[b.reach]:""}</span></span>
+        <span class="pos">${brl(ct.perRound)}/rod · ${ct.seasonsLeft} temp.
+          <button data-drop="${key}" style="margin-left:8px">Rescindir</button></span></div>`;
+    } else if(offers.length){
+      for(let i=0;i<offers.length;i++){
+        const o=offers[i], b=BR.brandById(o.brandId);
+        html+=`<div class="line"><span>${logoImg(b,null,16)} ${b.name}
+            <span class="sub">${BR.REACH_PT[b.reach]} · prestígio ${b.prestige}</span></span>
+          <span>${brl(o.perRound)}/rod · ${o.seasons} temp.
+            <button data-sign="${key}" data-i="${i}" style="margin-left:8px">Assinar</button></span></div>`;
+      }
+    } else html+=`<div class="sub">Nenhuma marca interessada neste slot agora.</div>`;
+    html+=`</div>`;
+  }
   body.innerHTML=html;
-  body.querySelectorAll("[data-sp]").forEach(b=> b.onclick=()=>{
-    const o=opts[+b.dataset.sp]; c.sponsor={name:o.name, perRound:o.perRound};
+  body.querySelectorAll("[data-sign]").forEach(btn=> btn.onclick=()=>{
+    const key=btn.dataset.sign, o=c.sponsorOffers[key][+btn.dataset.i];
+    BR.signSponsor(c,key,o);
+    toast("Patrocínio assinado: "+BR.brandById(o.brandId).name);
+    renderFinance($("view")); rerender();
+  });
+  body.querySelectorAll("[data-drop]").forEach(btn=> btn.onclick=()=>{
+    BR.dropSponsor(c, btn.dataset.drop);
+    toast("Contrato rescindido");
     renderFinance($("view")); rerender();
   });
 }

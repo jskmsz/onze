@@ -28,6 +28,21 @@ button:disabled{opacity:.45; cursor:not-allowed}
   overflow-x:auto;font-size:13px;color:var(--accent)}
 .filewarn a{color:var(--home)}
 
+/* Editor de uniforme */
+.kitbox{width:min(880px,96vw)}
+.kit-tabs{display:flex;gap:4px;margin:12px 0 0}
+.kit-tabs .tab{background:var(--panel);border:1px solid var(--line);border-bottom:none;padding:7px 14px;
+  border-radius:10px 10px 0 0;cursor:pointer;font-size:13px;color:var(--muted)}
+.kit-tabs .tab.active{background:var(--panel2);color:var(--txt);font-weight:600}
+.kit-wrap{display:grid;grid-template-columns:1fr 260px;gap:14px;border:1px solid var(--line);
+  border-radius:0 12px 12px 12px;background:var(--panel);padding:14px}
+.kit-canvas{display:flex;flex-direction:column;align-items:center;gap:8px}
+.kit-canvas canvas{width:100%;max-width:340px;height:auto;
+  background:repeating-conic-gradient(#2a3038 0 25%,#222831 0 50%) 0 0/18px 18px;border-radius:10px}
+.kit-ctl{max-height:460px;overflow-y:auto}
+.kit-ctl input[type=color]{width:52px;height:26px;padding:0;border-radius:6px}
+@media(max-width:700px){.kit-wrap{grid-template-columns:1fr}}
+
 /* Estrelas de prestígio */
 .stars{color:var(--gold);letter-spacing:1px;white-space:nowrap}
 

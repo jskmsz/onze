@@ -1,3 +1,8 @@
+import { BRANDS, SPONSOR_SLOTS, SLOT_KEYS, canSponsor, slotOffer, makeOffers,
+         sponsorIncome, tickContracts, brandById } from "./brands.js";
+export { SPONSOR_SLOTS, SLOT_KEYS, BRANDS, brandById, sponsorIncome } from "./brands.js";
+export * as Brands from "./brands.js";
+
 /* =====================================================================
    ONZE — core.js
    Modelo + geração fictícia + adequação de posição + comissão técnica +
@@ -323,7 +328,11 @@ export function applyTraining(club){
 export function roundFinance(club, isHome, fillOverride, fines=0){
   const eff = staffEffects(club);
   const gate = isHome ? matchdayRevenue(club, fillOverride) : 0;
-  const sponsor = Math.round(club.sponsor.perRound * eff.sponsorMult);
+  // patrocínios por slot (novo) + contrato antigo, se ainda existir
+  const slots = sponsorIncome(club);
+  const legacy = (club.sponsors && Object.keys(club.sponsors).length) ? 0
+               : ((club.sponsor && club.sponsor.perRound) || 0);
+  const sponsor = Math.round((slots+legacy) * eff.sponsorMult);
   const playerWages = playerWageTotal(club);
   const staffWages = staffWageTotal(club);
   const upkeep = stadiumUpkeep(club, isHome);
@@ -335,6 +344,23 @@ export function roundFinance(club, isHome, fillOverride, fines=0){
 }
 
 /* ---------- Patrocínio ---------- */
+/* Preenche automaticamente os patrocínios de um clube (usado pela IA e no início) */
+export function autoSponsor(club, fill=0.75){
+  club.sponsors = club.sponsors || {};
+  const rk = reachOf(club.prestige).k;
+  for(const k of SLOT_KEYS){
+    if(club.sponsors[k]) continue;
+    if(Math.random()>fill) continue;
+    const S=SPONSOR_SLOTS[k];
+    const pool=BRANDS.filter(b=>
+      (S.kind==="supplier"? b.kind==="supplier" : b.kind==="sponsor") && canSponsor(rk,b));
+    if(!pool.length) continue;
+    const b=pool[Math.floor(Math.random()*pool.length)];
+    club.sponsors[k]={brandId:b.id, perRound:slotOffer(club.prestige,b,k),
+      seasonsLeft:1+Math.floor(Math.random()*3), logoColor:null};
+  }
+}
+
 export function sponsorOptions(club){
   // prestígio maior => marcas maiores pagam mais (cresce mais que linear)
   const base = Math.pow(club.prestige||club.rep, 1.35)*640;
@@ -505,6 +531,14 @@ export function startNewSeason(world){
     if(c.lineup) c.lineup.spots.forEach(s=>{ if(!c.squad.find(p=>p.id===s.id)) s.id=null; });
   }
   refreshMarket(world);
+  // contratos de patrocínio correm; a IA renova sozinha, o usuário escolhe
+  for(const c of world.clubs){
+    const gone=tickContracts(c);
+    if(c.id===world.userId){
+      c.sponsorOffers=makeOffers(c, reachOf(c.prestige).k);
+      for(const g of gone) news.push(`Patrocínio encerrado: ${SPONSOR_SLOTS[g.slot].l}.`);
+    } else autoSponsor(c, 0.85);
+  }
   return {news, prizes};
 }
 
@@ -613,11 +647,14 @@ export function generateWorld(){
       sponsor:{name:"Contrato padrão", perRound:Math.round(Math.pow(c.rep,1.35)*640 + rnd(0,40000))},
       finance:{ balance: Math.round(c.rep*300000 + rnd(-2e6,4e6)), ledger:[] },
       kit:{pattern:"solid", primary:c.color, secondary:"#eef2f7", image:null},
+      kitDesign:null, kitDesignAlt:null,      // preenchidos no migrate/app (dependem de kit.js)
+      sponsors:{}, sponsorOffers:null,
       lineup:null,
       discipline:{closedDoors:0, history:[]},
       prospects:[],
     };
   });
+  for(const c of clubs) autoSponsor(c, 0.8);   // todo mundo começa com patrocínios
   const fixtures = makeSchedule(clubs.map(c=>c.id));
   const w = { clubs, fixtures, round:0, season:2026, userId:null, leagueName:"Ligue de Dournéa",
     customFormations:[], phase:"league", transferList:[], friendlies:[] };
