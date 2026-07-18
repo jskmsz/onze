@@ -135,6 +135,7 @@ export function clubPageHTML(world, club){
 /* ---------- Navegador de clubes (enciclopédia) ---------- */
 export function openClubBrowser(world, hostId="modalHost"){
   const host=$(hostId);
+  host.innerHTML="";
   let sel=world.clubs[0].id, q="";
   const modal=el("div","modal");
   modal.innerHTML=`<div class="box browserbox">
@@ -183,12 +184,23 @@ export function openClubBrowser(world, hostId="modalHost"){
 /* ---------- Editor de clubes (e jogadores, antes da carreira) ---------- */
 export function openWorldEditor(world, opts={}){
   const host=$("modalHost");
+  host.innerHTML="";
   const canEditPlayers = !!opts.allowPlayers;
   let sel=world.clubs[0].id, tab="clube";
   const modal=el("div","modal");
   modal.innerHTML=`<div class="box browserbox">
     <button class="close" id="weClose">✕ Fechar</button>
     <h2>Editor de mundo ${canEditPlayers?"":"<span class='sub'>(jogadores só antes de começar)</span>"}</h2>
+    <div class="we-top">
+      <span class="sub" id="weStatus">As alterações são salvas automaticamente e valem para toda carreira nova.</span>
+      <span style="display:flex;gap:6px">
+        <button id="weSaveAll">💾 Salvar mundo</button>
+        <button id="weExport">⤓ Exportar</button>
+        <button id="weImport">⤒ Importar</button>
+        <button id="weRandom" title="Descarta o mundo salvo e sorteia outro">🎲 Aleatório</button>
+        <input type="file" id="weFile" accept=".json,application/json" hidden>
+      </span>
+    </div>
     <div class="cb-wrap">
       <div class="cb-side">
         <div id="weList" class="cb-list"></div>
@@ -204,7 +216,28 @@ export function openWorldEditor(world, opts={}){
       </div>
     </div></div>`;
   host.appendChild(modal);
+  const flash=m=>{ const s=$("weStatus"); if(!s)return; s.textContent=m;
+    setTimeout(()=>{ if($("weStatus")) $("weStatus").textContent=
+      "As alterações são salvas automaticamente e valem para toda carreira nova."; },2200); };
   $("weClose").onclick=()=>{ host.innerHTML=""; opts.onClose&&opts.onClose(); };
+  $("weSaveAll").onclick=()=>{ opts.onChange&&opts.onChange(world); flash("✅ Mundo salvo."); };
+  $("weExport").onclick=()=>{
+    const blob=new Blob([JSON.stringify(C.worldTemplate(world),null,1)],{type:"application/json"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download="onze-mundo.json"; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  };
+  $("weImport").onclick=()=>$("weFile").click();
+  $("weFile").onchange=async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{
+      const tpl=JSON.parse(await f.text());
+      const list=tpl.clubs||tpl;
+      if(!Array.isArray(list)||!list.length) throw new Error("sem clubes");
+      opts.onImport && opts.onImport(tpl.clubs?tpl:{clubs:list});
+      flash(`✅ ${list.length} clubes importados.`);
+    }catch(err){ flash("⚠️ Arquivo inválido: "+err.message); }
+  };
+  $("weRandom").onclick=()=>{ opts.onRandom && opts.onRandom(); };
 
   const listar=()=>{
     $("weList").innerHTML=world.clubs.map(c=>`
@@ -225,6 +258,7 @@ export function openWorldEditor(world, opts={}){
       const p=mapClickCoords($("weMap"), ev);
       const c=C.clubById(world,sel);
       c.coords={x:+p.x.toFixed(4), y:+p.y.toFixed(4)};
+      opts.onChange&&opts.onChange(world);      // posição no mapa fica salva
       render();
     };
   };
@@ -270,7 +304,7 @@ export function openWorldEditor(world, opts={}){
       S.name=$("wStad").value.trim()||S.name;
       S.capacity=Math.max(2000,+$("wCap").value||S.capacity);
       if(c.kitDesign) c.kitDesign.shirt=c.color;
-      opts.onChange&&opts.onChange();
+      opts.onChange&&opts.onChange(world);
       render();
     };
   }
@@ -295,8 +329,8 @@ export function openWorldEditor(world, opts={}){
   }
   function playerForm(club, pid){
     const p=club.squad.find(x=>x.id===pid); if(!p) return;
-    const natOpts=Object.entries(C.NATIONS).map(([k,n])=>
-      `<option value="${k}" ${p.nat===k?"selected":""}>${n.flag} ${n.name}</option>`).join("");
+    const natOpts=C.NATION_LIST.map(n=>
+      `<option value="${n.key}" ${p.nat===n.key?"selected":""}>${n.flag} ${n.name}</option>`).join("");
     const posOpts=C.SLOT_LIST.map(s=>`<option value="${s}" ${p.pos===s?"selected":""}>${s}</option>`).join("");
     $("wePlayerForm").innerHTML=`<div class="we-form">
       <div class="row2"><label>Nome</label><input id="pName" value="${esc(p.name)}"></div>
@@ -318,7 +352,7 @@ export function openWorldEditor(world, opts={}){
       p.overall=C.overall(p);
       p.potential=Math.max(p.overall, +$("pPot").value);
       p.wage=C.wageFor(p);
-      opts.onChange&&opts.onChange();
+      opts.onChange&&opts.onChange(world);
       panePlayers();
     };
   }

@@ -19,12 +19,21 @@ export const REGIONS = {
   shorts: {x:0.545, y:0.602, w:0.455, h:0.398},
 };
 export const PATTERNS = {
-  solid:  "Lisa",
-  stripes:"Listras verticais",
-  hoops:  "Faixas horizontais",
-  sash:   "Faixa diagonal",
-  halves: "Metades",
-  center: "Faixa central",
+  solid:    "Lisa",
+  stripes:  "Listras verticais",
+  pinstripe:"Listras finas",
+  hoops:    "Faixas horizontais",
+  hoopsThin:"Faixas finas",
+  sash:     "Faixa diagonal",
+  sashD:    "Faixa diagonal (dupla)",
+  halves:   "Metades",
+  quarters: "Quartos",
+  center:   "Faixa central",
+  chevron:  "Chevron (V)",
+  shoulders:"Ombros",
+  checker:  "Xadrez",
+  gradient: "Degradê",
+  waves:    "Ondas",
 };
 export const BADGE_POS = {
   esq:  {l:"Peito esquerdo", x:0.175, y:0.160, size:0.070},
@@ -41,8 +50,16 @@ export const defaultKitDesign = (club, alt=false) => ({
   socks: alt ? "#f5f7fa" : (club.color||"#1f6feb"),
   detail:"#ffffff",
   badge:"dir",              // à direita p/ não colidir com o logo do fornecedor
-  logoTint:{},          // slotKey -> cor forçada do logo (ou null = cor da marca)
+  badgeSize:null,           // null = tamanho padrão
+  logoTint:{},              // slotKey -> cor forçada do logo (ou null = cor da marca)
+  slots:{},                 // slotKey -> {x,y,size} sobrescrevendo o padrão
+  number:{show:true, x:0.770, y:0.700, size:0.075, color:"#ffffff"},  // número no calção
 });
+/* posição/tamanho efetivos de um slot (respeita o que você arrastou) */
+export function slotBox(design, key, def){
+  const o=(design.slots&&design.slots[key])||{};
+  return { x:o.x??def.pos.x, y:o.y??def.pos.y, size:o.size??def.size };
+}
 
 /* ---------- carregamento de imagens (com cache) ---------- */
 const _cache=new Map();
@@ -88,14 +105,35 @@ function paintLayer(W,H,d){
   g.fillStyle=d.shirt; g.fillRect(x,y,w,h);
   g.save(); g.beginPath(); g.rect(x,y,w,h); g.clip();
   g.fillStyle=d.detail;
-  if(d.pattern==="stripes"){ const n=7; for(let i=0;i<n;i++) if(i%2) g.fillRect(x+i*w/n,y,w/n,h); }
-  else if(d.pattern==="hoops"){ const n=9; for(let i=0;i<n;i++) if(i%2) g.fillRect(x,y+i*h/n,w,h/n); }
-  else if(d.pattern==="halves"){ g.fillRect(x+w/2,y,w/2,h); }
-  else if(d.pattern==="center"){ g.fillRect(x+w*0.40,y,w*0.20,h); }
-  else if(d.pattern==="sash"){
-    g.translate(x+w/2,y+h/2); g.rotate(-0.62);
-    g.fillRect(-w*0.13,-h,w*0.26,h*2);
-  }
+  const P=d.pattern;
+  if(P==="stripes"){ const n=7; for(let i=0;i<n;i++) if(i%2) g.fillRect(x+i*w/n,y,w/n,h); }
+  else if(P==="pinstripe"){ const n=19; for(let i=0;i<n;i++) if(i%2) g.fillRect(x+i*w/n,y,w/n*0.55,h); }
+  else if(P==="hoops"){ const n=9; for(let i=0;i<n;i++) if(i%2) g.fillRect(x,y+i*h/n,w,h/n); }
+  else if(P==="hoopsThin"){ const n=21; for(let i=0;i<n;i++) if(i%2) g.fillRect(x,y+i*h/n,w,h/n*0.6); }
+  else if(P==="halves"){ g.fillRect(x+w/2,y,w/2,h); }
+  else if(P==="quarters"){ g.fillRect(x+w/2,y,w/2,h/2); g.fillRect(x,y+h/2,w/2,h/2); }
+  else if(P==="center"){ g.fillRect(x+w*0.40,y,w*0.20,h); }
+  else if(P==="sash"){ g.translate(x+w/2,y+h/2); g.rotate(-0.62); g.fillRect(-w*0.13,-h,w*0.26,h*2); }
+  else if(P==="sashD"){ g.save(); g.translate(x+w/2,y+h/2); g.rotate(-0.62);
+      g.fillRect(-w*0.30,-h,w*0.16,h*2); g.fillRect(w*0.06,-h,w*0.16,h*2); g.restore(); }
+  else if(P==="chevron"){ const n=5;
+      for(let i=0;i<n;i++){ const yy=y+h*(0.12+i*0.17);
+        g.beginPath(); g.moveTo(x,yy); g.lineTo(x+w/2,yy+h*0.09); g.lineTo(x+w,yy);
+        g.lineTo(x+w,yy+h*0.05); g.lineTo(x+w/2,yy+h*0.14); g.lineTo(x,yy+h*0.05); g.closePath(); g.fill(); } }
+  else if(P==="shoulders"){ g.fillRect(x,y,w,h*0.16);
+      g.fillRect(x,y,w*0.13,h*0.42); g.fillRect(x+w*0.87,y,w*0.13,h*0.42); }
+  else if(P==="checker"){ const n=8, m=10;
+      for(let i=0;i<n;i++) for(let j=0;j<m;j++) if((i+j)%2) g.fillRect(x+i*w/n,y+j*h/m,w/n,h/m); }
+  else if(P==="gradient"){ const gr=g.createLinearGradient(x,y,x,y+h);
+      gr.addColorStop(0,d.detail); gr.addColorStop(1,"rgba(0,0,0,0)");
+      g.fillStyle=gr; g.fillRect(x,y,w,h); }
+  else if(P==="waves"){ const n=7;
+      for(let i=0;i<n;i++){ const yy=y+h*(i+0.5)/n;
+        g.beginPath(); g.moveTo(x,yy);
+        for(let px=0;px<=w;px+=w/24) g.lineTo(x+px, yy+Math.sin(px/w*Math.PI*4)*h*0.022);
+        g.lineTo(x+w,yy+h*0.045);
+        for(let px=w;px>=0;px-=w/24) g.lineTo(x+px, yy+h*0.045+Math.sin(px/w*Math.PI*4)*h*0.022);
+        g.closePath(); g.fill(); } }
   g.restore();
   return c;
 }
@@ -145,14 +183,31 @@ function drawFallback(ctx,W,H,d){
   ctx.drawImage(mask,0,0);
 }
 
-/* escudo + logos dos patrocinadores */
+/* onde cada elemento arrastável está agora (usado pelo editor p/ hit-test) */
+export function decalBoxes(club, d){
+  const out=[];
+  if(club.badge && d.badge && BADGE_POS[d.badge]){
+    const B=BADGE_POS[d.badge], s=(d.badgeSize??B.size);
+    out.push({key:"__badge", label:"Escudo", x:B.x, y:B.y, w:s, h:s});
+  }
+  for(const key of KIT_SLOTS){
+    if(!(club.sponsors||{})[key]) continue;
+    const b=slotBox(d,key,SPONSOR_SLOTS[key]);
+    out.push({key, label:SPONSOR_SLOTS[key].l, x:b.x, y:b.y, w:b.size, h:b.size*0.32});
+  }
+  if(d.number&&d.number.show)
+    out.push({key:"__number", label:"Número", x:d.number.x, y:d.number.y, w:d.number.size, h:d.number.size});
+  return out;
+}
+
+/* escudo + logos dos patrocinadores + número */
 async function drawDecals(ctx,W,H,club,d,opts){
   // escudo
   if(club.badge && d.badge && BADGE_POS[d.badge]){
     const B=BADGE_POS[d.badge];
     try{
       const img=await loadImage(club.badge);
-      const s=B.size*W;
+      const s=(d.badgeSize??B.size)*W;
       ctx.drawImage(img, B.x*W-s/2, B.y*H-s/2, s, s);
     }catch(e){ /* escudo inválido: ignora */ }
   }
@@ -162,19 +217,36 @@ async function drawDecals(ctx,W,H,club,d,opts){
     const ct=contracts[key]; if(!ct) continue;
     const S=SPONSOR_SLOTS[key], brand=brandById(ct.brandId); if(!brand) continue;
     const tint=(d.logoTint&&d.logoTint[key])||null;
+    const box=slotBox(d,key,S);
     try{
-      const c=await tintedLogo(brandLogo(brand, tint||undefined), tint);
-      const wpx=S.size*W, hpx=wpx*(c.height/c.width);
-      ctx.drawImage(c, S.pos.x*W-wpx/2, S.pos.y*H-hpx/2, wpx, hpx);
+      let src=brandLogo(brand, tint||undefined);
+      try{ await loadImage(src); }
+      catch(e){ src=brandLogo({...brand, logo:null}, tint||undefined); }   // PNG faltando → wordmark
+      const c=await tintedLogo(src, tint);
+      const wpx=box.size*W, hpx=wpx*(c.height/c.width);
+      ctx.drawImage(c, box.x*W-wpx/2, box.y*H-hpx/2, wpx, hpx);
     }catch(e){ /* ignora logo com problema */ }
   }
-  // marcador do slot em edição
-  if(opts.highlight && SPONSOR_SLOTS[opts.highlight]?.pos){
-    const S=SPONSOR_SLOTS[opts.highlight];
-    ctx.strokeStyle="#d29922"; ctx.lineWidth=Math.max(2,W*0.004); ctx.setLineDash([6,4]);
-    const wpx=S.size*W, hpx=wpx*0.30;
-    ctx.strokeRect(S.pos.x*W-wpx/2, S.pos.y*H-hpx/2, wpx, hpx);
-    ctx.setLineDash([]);
+  // número do jogador (no calção)
+  if(d.number && d.number.show){
+    const n=d.number, px=n.size*W;
+    ctx.save();
+    ctx.font=`900 ${px}px "Arial Black", Arial, sans-serif`;
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.lineWidth=px*0.14; ctx.strokeStyle="rgba(0,0,0,.35)";
+    ctx.strokeText(String(opts.number??10), n.x*W, n.y*H);
+    ctx.fillStyle=n.color||"#fff";
+    ctx.fillText(String(opts.number??10), n.x*W, n.y*H);
+    ctx.restore();
+  }
+  // marcador do elemento selecionado
+  if(opts.highlight){
+    const b=decalBoxes(club,d).find(x=>x.key===opts.highlight);
+    if(b){
+      ctx.strokeStyle="#d29922"; ctx.lineWidth=Math.max(2,W*0.005); ctx.setLineDash([7,5]);
+      ctx.strokeRect(b.x*W-b.w*W/2, b.y*H-b.h*W/2, b.w*W, b.h*W);
+      ctx.setLineDash([]);
+    }
   }
 }
 

@@ -83,7 +83,56 @@ export const NATIONS = {
     first:["Erling","Kristian","Håkon","Sander","Mathias","Emil","Jonas","Sondre","Ola","Vegard","Halvard","Torbjørn"],
     last:["Hansen","Johansen","Olsen","Larsen","Andersen","Berg","Haugen","Solberg","Dahl","Moen","Lie","Strand"]},
 };
-const NAT_KEYS = Object.keys(NATIONS);
+/* ---- Todos os países do mundo ----
+   Só os de cima têm pool de nomes e peso (aparecem na geração automática).
+   Os demais entram com peso 0: existem para você escolher no editor.
+   A bandeira é derivada do código ISO-2 (letras → indicadores regionais). */
+const ISO_FLAG = c => c.length===2
+  ? String.fromCodePoint(...[...c.toUpperCase()].map(ch=>0x1F1E6+ch.charCodeAt(0)-65))
+  : "🏳️";
+const WORLD_COUNTRIES = `
+AF Afeganistão|ZA África do Sul|AL Albânia|DE Alemanha|AD Andorra|AO Angola|AG Antígua e Barbuda|
+SA Arábia Saudita|DZ Argélia|AR Argentina|AM Armênia|AU Austrália|AT Áustria|AZ Azerbaijão|
+BS Bahamas|BH Bahrein|BD Bangladesh|BB Barbados|BE Bélgica|BZ Belize|BJ Benin|BY Bielorrússia|
+BO Bolívia|BA Bósnia e Herzegovina|BW Botsuana|BR Brasil|BN Brunei|BG Bulgária|BF Burquina Faso|
+BI Burundi|BT Butão|CV Cabo Verde|CM Camarões|KH Camboja|CA Canadá|QA Catar|KZ Cazaquistão|
+TD Chade|CL Chile|CN China|CY Chipre|CO Colômbia|KM Comores|CG Congo|CD Congo (RDC)|
+KP Coreia do Norte|KR Coreia do Sul|CI Costa do Marfim|CR Costa Rica|HR Croácia|CU Cuba|
+DK Dinamarca|DJ Djibuti|DM Dominica|EG Egito|SV El Salvador|AE Emirados Árabes|EC Equador|
+ER Eritreia|SK Eslováquia|SI Eslovênia|ES Espanha|US Estados Unidos|EE Estônia|SZ Essuatíni|
+ET Etiópia|FJ Fiji|PH Filipinas|FI Finlândia|FR França|GA Gabão|GM Gâmbia|GH Gana|GE Geórgia|
+GD Granada|GR Grécia|GT Guatemala|GY Guiana|GN Guiné|GW Guiné-Bissau|GQ Guiné Equatorial|
+HT Haiti|NL Holanda|HN Honduras|HU Hungria|YE Iêmen|IN Índia|ID Indonésia|IR Irã|IQ Iraque|
+IE Irlanda|IS Islândia|IL Israel|IT Itália|JM Jamaica|JP Japão|JO Jordânia|KW Kuwait|LA Laos|
+LS Lesoto|LV Letônia|LB Líbano|LR Libéria|LY Líbia|LI Liechtenstein|LT Lituânia|LU Luxemburgo|
+MK Macedônia do Norte|MG Madagascar|MY Malásia|MW Maláui|MV Maldivas|ML Mali|MT Malta|MA Marrocos|
+MU Maurício|MR Mauritânia|MX México|MM Myanmar|MZ Moçambique|MD Moldávia|MC Mônaco|MN Mongólia|
+ME Montenegro|NA Namíbia|NP Nepal|NI Nicarágua|NE Níger|NG Nigéria|NO Noruega|NZ Nova Zelândia|
+OM Omã|PW Palau|PS Palestina|PA Panamá|PG Papua-Nova Guiné|PK Paquistão|PY Paraguai|PE Peru|
+PL Polônia|PR Porto Rico|PT Portugal|KE Quênia|KG Quirguistão|GB Reino Unido|CF Rep. Centro-Africana|
+DO Rep. Dominicana|CZ Tchéquia|RO Romênia|RW Ruanda|RU Rússia|WS Samoa|SM San Marino|LC Santa Lúcia|
+SN Senegal|SL Serra Leoa|RS Sérvia|SC Seicheles|SG Singapura|SY Síria|SO Somália|LK Sri Lanka|
+SD Sudão|SS Sudão do Sul|SE Suécia|CH Suíça|SR Suriname|TH Tailândia|TW Taiwan|TJ Tajiquistão|
+TZ Tanzânia|TL Timor-Leste|TG Togo|TO Tonga|TT Trinidad e Tobago|TN Tunísia|TM Turcomenistão|
+TR Turquia|UA Ucrânia|UG Uganda|UY Uruguai|UZ Uzbequistão|VU Vanuatu|VA Vaticano|VE Venezuela|
+VN Vietnã|ZM Zâmbia|ZW Zimbábue`;
+for(const entry of WORLD_COUNTRIES.split("|")){
+  const s=entry.trim(); if(!s) continue;
+  const code=s.slice(0,2), name=s.slice(3).trim();
+  if(!code || !name) continue;
+  const key=code.toLowerCase();
+  if(NATIONS[key]) continue;                       // não sobrescreve os que já têm pool
+  NATIONS[key]={flag:ISO_FLAG(code), name, weight:0};
+}
+/* aliases: as 8 originais também respondem pelo código ISO */
+const ALIAS={fr:"fra", ie:"irl", is:"isl", es:"esp", pt:"por", no:"nor"};
+for(const [iso,old] of Object.entries(ALIAS)) if(NATIONS[iso]) NATIONS[iso].alias=old;
+
+export const NATION_LIST = Object.entries(NATIONS)
+  .map(([k,n])=>({key:k, name:n.name, flag:n.flag}))
+  .sort((a,b)=> a.key==="dou" ? -1 : b.key==="dou" ? 1 : a.name.localeCompare(b.name,"pt"));
+
+const NAT_KEYS = Object.keys(NATIONS).filter(k=>NATIONS[k].weight>0);
 const NAT_TOTAL = NAT_KEYS.reduce((s,k)=>s+NATIONS[k].weight,0);
 function pickNation(){
   let r=Math.random()*NAT_TOTAL;
@@ -98,25 +147,27 @@ export const nationName = p => (NATIONS[p.nat]||NATIONS.dou).name;
    Cidades próximas (<35 km) geram clássicos regionais.                      */
 export const MAP_KM = {w:520, h:700};
 export const CITIES = {
-  "Kervadan":   {pop:840000, x:0.46, y:0.34},
-  "Landivael":  {pop:190000, x:0.485,y:0.365},   // vizinha da capital → dérbi
-  "Gwenmor":    {pop:610000, x:0.29, y:0.55},
-  "Ker-Ys":     {pop:430000, x:0.17, y:0.30},
-  "Plouarnel":  {pop:355000, x:0.62, y:0.22},
-  "Lanhouarne": {pop:280000, x:0.38, y:0.70},
-  "Tregonan":   {pop:245000, x:0.72, y:0.48},
+  "Dourn-Kêr":   {pop:1100000, x:0.46, y:0.34},
+  "Corot":  {pop:190000, x:0.485,y:0.365},   // vizinha da capital → dérbi
+  "Kêr-Gwalarn":    {pop:620000, x:0.29, y:0.55},
+  "Porzh-Houarn":     {pop:145000, x:0.17, y:0.30},
+  "Kemper-Vraz":  {pop:115000, x:0.62, y:0.22},
+  "Kastell-Asgok": {pop:55000, x:0.282, y:0.539},
+  "Douelez":   {pop:118000, x:0.72, y:0.48},
   "Morlaven":   {pop:300000, x:0.22, y:0.76},
-  "Roc'halen":  {pop:165000, x:0.58, y:0.63},
-  "Brocéliande":{pop:120000, x:0.44, y:0.50},
-  "Kerdrec'h":  {pop:150000, x:0.80, y:0.68},
-  "Sant-Konan": {pop:205000, x:0.34, y:0.18},
-  "Aravon":     {pop:88000,  x:0.66, y:0.85},
-  "Penant":     {pop:62000,  x:0.12, y:0.60},
+  "Plou-Nevez":  {pop:42000, x:0.58, y:0.63},
+  "Porzh-Tasond":{pop:24000, x:0.44, y:0.50},
+  "Mengleuz":  {pop:8500, x:0.80, y:0.68},
+  "Tinneír Dyechésa": {pop:92000, x:0.34, y:0.18},
+  "Chasal":     {pop:9200,  x:0.66, y:0.85},
+  "Dyetraig":     {pop:5000,  x:0.12, y:0.60},
   "Lannedis":   {pop:47000,  x:0.55, y:0.90},
-  "Penmarc'hen":{pop:38000,  x:0.86, y:0.30},
+  "Sant-Brieg":{pop:85000,  x:0.86, y:0.30},
 };
+/* original
+
 const CLUBS = [
-  {name:"Stade Kervadan",     short:"KER", color:"#1f6feb", city:"Kervadan",    rep:82, founded:1901},
+  {name:"Stade Kervadan",     short:"KER", color:"#1f6feb", city:"Dourn-Kêr",    rep:82, founded:1901},
   {name:"Olympique Gwenmor",  short:"GWE", color:"#2ea043", city:"Gwenmor",     rep:80, founded:1907},
   {name:"AS Ker-Ys",          short:"KYS", color:"#0d9488", city:"Ker-Ys",      rep:78, founded:1912},
   {name:"Racing Plouarnel",   short:"PLO", color:"#dc2626", city:"Plouarnel",   rep:76, founded:1904},
@@ -132,6 +183,32 @@ const CLUBS = [
   {name:"US Penant",          short:"PEN", color:"#475569", city:"Penant",      rep:54, founded:1951},
   {name:"Korrigan Lannedis",  short:"LND", color:"#4d7c0f", city:"Lannedis",    rep:52, founded:1948},
   {name:"FC Penmarc'hen",     short:"PMH", color:"#38bdf8", city:"Penmarc'hen", rep:49, founded:1957},
+];
+
+*/
+
+const CLUBS = [
+  {name: "KM Madraie", short: "KSM", color: "#14b8a6", city: "Dourn-Kêr", rep: 95, founded: 1905},
+  {name: "KS Korsaer", short: "KSK", color: "#f97316", city: "Kêr-Gwalarn", rep: 88, founded: 1902},
+  {name: "Racing Dournquer", short: "RCD", color: "#1e40af", city: "Dourn-Kêr", rep: 91, founded: 1899},
+  {name: "Olimpek Querval", short: "OLQ", color: "#b91c1c", city: "Kêr-Gwalarn", rep: 84, founded: 1911},
+  {name: "KM Morlaven", short: "KMM", color: "#0284c7", city: "Morlaven", rep: 80, founded: 1915},
+  {name: "En Avant Morlaven", short: "EAM", color: "#0f766e", city: "Morlaven", rep: 77, founded: 1933},
+  {name: "AS Kêr-Gozh", short: "AKG", color: "#4b5563", city: "Dourn-Kêr", rep: 79, founded: 1920},
+  {name: "US Corot", short: "USC", color: "#4d7c0f", city: "Corot", rep: 75, founded: 1914},
+  {name: "KS Porsouarn", short: "KSP", color: "#312e81", city: "Porzh-Houarn", rep: 72, founded: 1908},
+  {name: "Stade Douelez", short: "STD", color: "#6d28d9", city: "Douelez", rep: 70, founded: 1924},
+  {name: "Racing Kemper-Vraz", short: "RKV", color: "#be123c", city: "Kemper-Vraz", rep: 68, founded: 1909},
+  {name: "KS Bellevue", short: "KSB", color: "#06b6d4", city: "Dourn-Kêr", rep: 74, founded: 1972},
+  {name: "KM Dyechésa", short: "KMD", color: "#b45309", city: "Tinneír Dyechésa", rep: 64, founded: 1927},
+  {name: "Keltiek Sant-Brieg", short: "KSG", color: "#15803d", city: "Sant-Brieg", rep: 62, founded: 1903},
+  {name: "KMKA", short: "KKA", color: "#4338ca", city: "Kastell-Asgok", rep: 58, founded: 1946},
+  {name: "Korrigan Lannedis", short: "KRL", color: "#10b981", city: "Lannedis", rep: 55, founded: 1948},
+  {name: "Amicale Plou-Nevez", short: "APN", color: "#a21caf", city: "Plou-Nevez", rep: 52, founded: 1951},
+  {name: "Union Porzh-Tasond", short: "UPT", color: "#0369a1", city: "Porzh-Tasond", rep: 45, founded: 1938},
+  {name: "KM Chasal", short: "KMC", color: "#c2410c", city: "Chasal", rep: 38, founded: 1963},
+  {name: "AS Mengleuz", short: "ASM", color: "#e11d48", city: "Mengleuz", rep: 35, founded: 1974},
+  {name: "Etoile Dyetraig", short: "ETD", color: "#581c87", city: "Dyetraig", rep: 28, founded: 1981}
 ];
 
 /* distância entre dois clubes, em km */
@@ -695,6 +772,30 @@ export function generateWorld(){
   const fixtures = makeSchedule(clubs.map(c=>c.id));
   const w = { clubs, fixtures, round:0, season:2026, userId:null, leagueName:"Ligue de Dournéa",
     customFormations:[], phase:"league", transferList:[], friendlies:[] };
+  refreshMarket(w);
+  return w;
+}
+
+/* ---------- Mundo salvo (template) ----------
+   Guarda os clubes EXATAMENTE como você editou (elenco, estádio, escudo,
+   patrocínios, coordenadas) para que toda carreira nova comece igual.   */
+export function worldTemplate(world){
+  return {
+    version:1,
+    season: world.season,
+    leagueName: world.leagueName,
+    customFormations: world.customFormations||[],
+    clubs: JSON.parse(JSON.stringify(world.clubs)),
+  };
+}
+export function worldFromTemplate(tpl){
+  const clubs = JSON.parse(JSON.stringify(tpl.clubs));
+  clubs.forEach((c,i)=>{ if(c.id==null) c.id=i; });
+  const w = { clubs, fixtures: makeSchedule(clubs.map(c=>c.id)),
+    round:0, season: tpl.season||2026, userId:null,
+    leagueName: tpl.leagueName||"Ligue de Dournéa",
+    customFormations: tpl.customFormations||[],
+    phase:"league", transferList:[], friendlies:[] };
   refreshMarket(w);
   return w;
 }

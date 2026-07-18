@@ -35,10 +35,35 @@ async function loadBrands(){
   }catch(e){}
   brandSrc="embutido (placeholders)";
 }
+/* logos apontando para arquivo inexistente viram null (cai no wordmark) */
+async function sanitizeLogos(){
+  const n=await BR.validateLogos();
+  if(n){ await saveBrands(); console.info(`[Onze] ${n} logo(s) sem arquivo → usando wordmark`); }
+  return n;
+}
 const saveBrands = ()=> S.putData("brands", BR.BRANDS).catch(()=>{});
+
+/* mundo salvo pelo editor: toda carreira nova nasce dele */
+let worldTpl=null;
+async function loadWorldTemplate(){
+  try{ worldTpl = await S.getData("worldTemplate"); }catch(e){ worldTpl=null; }
+  return worldTpl;
+}
+function saveWorldTemplate(w){
+  worldTpl = C.worldTemplate(w);
+  S.putData("worldTemplate", worldTpl).catch(()=>{});
+  return worldTpl;
+}
+function clearWorldTemplate(){ worldTpl=null; S.putData("worldTemplate", null).catch(()=>{}); }
+function freshWorld(){
+  const w = worldTpl ? C.worldFromTemplate(worldTpl) : C.generateWorld();
+  migrate(w); return w;
+}
 
 async function boot(){
   await loadBrands();
+  await sanitizeLogos();
+  await loadWorldTemplate();
   showScreen("menu");
   try{
     const s=await S.loadGame();
@@ -51,8 +76,8 @@ async function boot(){
   }catch(e){ $("mSaveInfo").textContent="Nenhuma carreira salva."; }
 }
 function newGame(){
-  // se você editou o mundo no menu, a carreira começa com ele
-  world = window.__draft || C.generateWorld();
+  // começa do mundo editado/salvo (clubes, elencos, escudos, mapa) ou gera um novo
+  world = window.__draft || freshWorld();
   window.__draft = null;
   migrate(world);
   renderClubGrid(); showScreen("start");
@@ -452,6 +477,7 @@ function renderSpotPanel(c, v, opp){
 let kitWhich="kitDesign", kitSlotSel=null;
 function openKitEditor(v){
   const c=me(), host=$("modalHost");
+  host.innerHTML="";                    // evita modal antigo deixando ids duplicados
   if(!c.kitDesign) c.kitDesign=K.defaultKitDesign(c,false);
   if(!c.kitDesignAlt) c.kitDesignAlt=K.defaultKitDesign(c,true);
   const modal=el("div","modal");
@@ -460,25 +486,97 @@ function openKitEditor(v){
     <div class="kit-tabs">
       <div class="tab ${kitWhich==="kitDesign"?"active":""}" data-k="kitDesign">1º uniforme</div>
       <div class="tab ${kitWhich==="kitDesignAlt"?"active":""}" data-k="kitDesignAlt">2º uniforme</div>
+      <button id="kitBig" style="margin-left:auto;padding:6px 12px">🔍 Ampliar</button>
     </div>
     <div class="kit-wrap">
-      <div class="kit-canvas"><canvas id="kitCv" width="680" height="800"></canvas>
-        <div class="sub" id="kitNote"></div></div>
+      <div class="kit-canvas">
+        <canvas id="kitCv" width="680" height="800"></canvas>
+        <div class="sub" id="kitNote"></div>
+        <div class="sub" id="kitSel">Arraste o escudo, os logos e o número direto no uniforme.</div>
+      </div>
       <div class="kit-ctl" id="kitCtl"></div>
     </div></div>`;
   modal.onclick=e=>{ if(e.target===modal) close(); };
   host.appendChild(modal);
-  const close=()=>{ host.innerHTML=""; renderLineup(v); rerender(); };
+  const close=()=>{ host.innerHTML=""; kitSlotSel=null; renderLineup(v); rerender(); };
   $("kClose").onclick=close;
+  $("kitBig").onclick=()=>openKitZoom(c);
   modal.querySelectorAll("[data-k]").forEach(t=> t.onclick=()=>{ kitWhich=t.dataset.k; host.innerHTML=""; openKitEditor(v); });
   buildKitControls(c, v);
   paintKit(c);
+  enableKitDrag(c, v);
+}
+
+/* arrastar escudo / logos / número direto no canvas */
+function enableKitDrag(c, v){
+  const cv=$("kitCv"); if(!cv) return;
+  const d=curDesign(c);
+  let drag=null;
+  const norm=ev=>{ const r=cv.getBoundingClientRect();
+    return {x:(ev.clientX-r.left)/r.width, y:(ev.clientY-r.top)/r.height}; };
+  const hit=p=>{
+    const boxes=K.decalBoxes(c,d);
+    for(let i=boxes.length-1;i>=0;i--){ const b=boxes[i];
+      const hw=Math.max(b.w,0.05)/2, hh=Math.max(b.h,0.04)/2*(680/800);
+      if(Math.abs(p.x-b.x)<hw && Math.abs(p.y-b.y)<hh+0.02) return b;
+    }
+    return null;
+  };
+  cv.style.cursor="grab";
+  cv.addEventListener("pointerdown",ev=>{
+    const p=norm(ev), b=hit(p);
+    if(!b) return;
+    ev.preventDefault(); cv.setPointerCapture(ev.pointerId); cv.style.cursor="grabbing";
+    drag={key:b.key, dx:b.x-p.x, dy:b.y-p.y};
+    kitSlotSel=b.key; buildKitControls(c,v); paintKit(c);
+  });
+  cv.addEventListener("pointermove",ev=>{
+    if(!drag) return;
+    const p=norm(ev);
+    const x=Math.max(0.02,Math.min(0.98,p.x+drag.dx));
+    const y=Math.max(0.02,Math.min(0.98,p.y+drag.dy));
+    if(drag.key==="__number"){ d.number.x=+x.toFixed(4); d.number.y=+y.toFixed(4); }
+    else if(drag.key==="__badge"){
+      // escudo: move criando uma posição livre
+      K.BADGE_POS[d.badge]={...K.BADGE_POS[d.badge], x:+x.toFixed(4), y:+y.toFixed(4)};
+    } else {
+      d.slots=d.slots||{};
+      const cur=d.slots[drag.key]||{};
+      d.slots[drag.key]={...cur, x:+x.toFixed(4), y:+y.toFixed(4)};
+    }
+    paintKit(c);
+  });
+  const end=ev=>{ if(!drag) return; drag=null; cv.style.cursor="grab"; buildKitControls(c,v); };
+  cv.addEventListener("pointerup",end);
+  cv.addEventListener("pointercancel",end);
+}
+
+/* visualização ampliada */
+function openKitZoom(c){
+  const host=$("modalHost");
+  const z=el("div","modal");
+  z.style.zIndex=20;
+  z.innerHTML=`<div class="box" style="width:min(760px,96vw)">
+    <button class="close" id="kzClose">✕ Fechar</button>
+    <h2>Uniforme ampliado</h2>
+    <div style="display:flex;justify-content:center;margin-top:10px">
+      <canvas id="kitZoom" width="1020" height="1200" class="kit-zoom"></canvas></div></div>`;
+  host.appendChild(z);
+  $("kzClose").onclick=()=>z.remove();
+  z.onclick=e=>{ if(e.target===z) z.remove(); };
+  K.renderKit($("kitZoom"), c, curDesign(c), {number:10});
 }
 function curDesign(c){ return c[kitWhich] || (c[kitWhich]=K.defaultKitDesign(c, kitWhich==="kitDesignAlt")); }
 
 async function paintKit(c){
   const cv=$("kitCv"); if(!cv) return;
-  const ok=await K.renderKit(cv, c, curDesign(c), {highlight:kitSlotSel});
+  const ok=await K.renderKit(cv, c, curDesign(c), {highlight:kitSlotSel, number:10});
+  const s=$("kitSel");
+  if(s){
+    const b=K.decalBoxes(c,curDesign(c)).find(x=>x.key===kitSlotSel);
+    s.innerHTML = b ? `Selecionado: <b>${b.label}</b> — arraste no uniforme ou ajuste o tamanho ao lado.`
+                    : "Arraste o escudo, os logos e o número direto no uniforme.";
+  }
   const n=$("kitNote");
   if(n) n.innerHTML = ok
     ? `Modelo: <b>${K.KIT_TEMPLATES[curDesign(c).template].l}</b>`
@@ -505,7 +603,26 @@ function buildKitControls(c, v){
         <button data-untint="${k}" title="Cor original da marca">↺</button></span></div>`;
   }).join("") || `<div class="sub">Nenhum patrocínio no uniforme ainda — assine em <b>Finanças → Patrocínios</b>.</div>`;
 
+  // painel do elemento selecionado (tamanho / número)
+  let selPane="";
+  if(kitSlotSel){
+    const b=K.decalBoxes(c,d).find(x=>x.key===kitSlotSel);
+    if(b){
+      const cur = kitSlotSel==="__number" ? d.number.size
+                : kitSlotSel==="__badge"  ? (d.badgeSize??K.BADGE_POS[d.badge].size)
+                : K.slotBox(d,kitSlotSel,BR.SPONSOR_SLOTS[kitSlotSel]).size;
+      selPane=`<div class="kit-selbox">
+        <h3>${b.label}</h3>
+        <div class="row2"><label>Tamanho</label>
+          <input type="range" id="kSize" min="20" max="400" value="${Math.round(cur*1000)}"></div>
+        ${kitSlotSel==="__number"?`
+          <div class="row2"><label>Cor do número</label><input type="color" id="kNumColor" value="${d.number.color}"></div>`:""}
+        <button id="kReset" style="margin-top:4px">↺ Posição padrão</button>
+      </div>`;
+    }
+  }
   box.innerHTML=`
+    ${selPane}
     <div class="row2"><label>Modelo</label><select id="kTpl">${tplOpts}</select></div>
     <div class="row2"><label>Padrão</label><select id="kPat">${patOpts}</select></div>
     <div class="row2"><label>Camisa</label><input type="color" id="kShirt" value="${d.shirt}"></div>
@@ -514,6 +631,7 @@ function buildKitControls(c, v){
     <div class="row2"><label>Meião</label><input type="color" id="kSocks" value="${d.socks}"></div>
     <hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
     <div class="row2"><label>Escudo</label><select id="kBadgePos">${badgeOpts}</select></div>
+    <div class="row2"><label><input type="checkbox" id="kNumShow" ${d.number?.show?"checked":""}> Número no calção</label></div>
     <div class="shirt-upload"><label>Imagem do escudo (PNG)</label>
       <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
         <span>${badgeHTML(c,34)}</span><input type="file" id="kBadge" accept="image/*" style="flex:1">
@@ -523,6 +641,22 @@ function buildKitControls(c, v){
     ${tintRows}`;
 
   const upd=()=>paintKit(c);
+  if($("kSize")) $("kSize").oninput=e=>{
+    const val=+e.target.value/1000;
+    if(kitSlotSel==="__number") d.number.size=val;
+    else if(kitSlotSel==="__badge") d.badgeSize=val;
+    else { d.slots=d.slots||{}; d.slots[kitSlotSel]={...(d.slots[kitSlotSel]||{}), size:val}; }
+    upd();
+  };
+  if($("kNumColor")) $("kNumColor").oninput=e=>{ d.number.color=e.target.value; upd(); };
+  if($("kReset")) $("kReset").onclick=()=>{
+    if(kitSlotSel==="__number") d.number={...K.defaultKitDesign(c).number};
+    else if(kitSlotSel==="__badge") d.badgeSize=null;
+    else if(d.slots) delete d.slots[kitSlotSel];
+    buildKitControls(c,v); upd();
+  };
+  if($("kNumShow")) $("kNumShow").onchange=e=>{
+    d.number=d.number||K.defaultKitDesign(c).number; d.number.show=e.target.checked; buildKitControls(c,v); upd(); };
   $("kTpl").onchange=e=>{ d.template=e.target.value; upd(); };
   $("kPat").onchange=e=>{ d.pattern=e.target.value; upd(); };
   $("kShirt").oninput=e=>{ d.shirt=e.target.value; upd(); };
@@ -546,6 +680,7 @@ let beFilter="", beKind="", beEditing=null, bePage=0;
 const BE_PAGE=60;
 function openBrandEditor(){
   const host=$("modalHost");
+  host.innerHTML="";
   const modal=el("div","modal");
   modal.innerHTML=`<div class="box brandbox">
     <button class="close" id="beClose">✕ Fechar</button>
@@ -1521,35 +1656,51 @@ function showRoundModal(results,r,injNews,discNews,trainNews){
   host.appendChild(modal); $("mClose").onclick=close;
 }
 
-$("btnAdvance").onclick=advanceRound;
-$("btnSave").onclick=async()=>{ try{ await S.saveGame(world); toast("Jogo salvo"); }catch(e){ toast("Erro ao salvar"); } };
-$("btnExport").onclick=()=> S.exportJSON(world);
-$("btnImport").onclick=()=> $("importFile").click();
-$("importFile").onchange=async e=>{
+/* liga um handler SEM quebrar o resto se o elemento não existir
+   (um game.html em cache já derrubou todos os botões seguintes uma vez) */
+function on(id, ev, fn){
+  const e=$(id);
+  if(!e){ console.warn("[Onze] elemento ausente:", id, "— recarregue com Ctrl+F5"); return; }
+  e[ev]=fn;
+}
+on("btnAdvance","onclick",advanceRound);
+on("btnSave","onclick",async()=>{ try{ await S.saveGame(world); toast("Jogo salvo"); }catch(e){ toast("Erro ao salvar"); } });
+on("btnExport","onclick",()=> S.exportJSON(world));
+on("btnImport","onclick",()=> $("importFile").click());
+on("importFile","onchange",async e=>{
   const f=e.target.files[0]; if(!f)return;
   try{ const w=await S.importJSON(f); adoptWorld(w); toast("Save importado"); }
   catch(err){ toast("Arquivo inválido"); }
-};
+});
 /* menu */
-$("mNew").onclick=newGame;
-$("mContinue").onclick=async()=>{
+on("mNew","onclick",newGame);
+on("mContinue","onclick",async()=>{
   try{ const s=await S.loadGame(); if(s&&s.world){ adoptWorld(s.world); toast("Carreira carregada"); } }
   catch(e){ toast("Erro ao carregar"); }
-};
-$("mImport").onclick=()=> $("importFile").click();
-$("mBrands").onclick=()=> openBrandEditor();
+});
+on("mImport","onclick",()=> $("importFile").click());
+on("mBrands","onclick",()=> openBrandEditor());
 /* mundo "de pré-jogo": gerado sob demanda para navegar/editar antes da carreira */
 function draftWorld(){
-  if(!window.__draft){ window.__draft=C.generateWorld(); migrate(window.__draft); }
+  if(!window.__draft) window.__draft=freshWorld();
   return window.__draft;
 }
-$("mClubs").onclick=()=> ED.openClubBrowser(world||draftWorld());
-$("mEditor").onclick=()=> ED.openWorldEditor(draftWorld(), {allowPlayers:true,
-  onChange:()=>{}, onClose:()=>{} });
-$("backToMenu").onclick=()=>{ showScreen("menu"); boot(); };
-$("btnClubs").onclick=()=> ED.openClubBrowser(world);
-$("btnMenu").onclick=async()=>{
+on("mClubs","onclick",()=> ED.openClubBrowser(world||draftWorld()));
+function openEditor(){
+  ED.openWorldEditor(draftWorld(), {
+    allowPlayers:true,
+    onChange:w=>saveWorldTemplate(w),
+    onImport:tpl=>{ window.__draft=C.worldFromTemplate(tpl); migrate(window.__draft);
+      saveWorldTemplate(window.__draft); $("modalHost").innerHTML=""; openEditor(); },
+    onRandom:()=>{ clearWorldTemplate(); window.__draft=C.generateWorld(); migrate(window.__draft);
+      $("modalHost").innerHTML=""; openEditor(); toast("Mundo aleatório gerado"); },
+  });
+}
+on("mEditor","onclick",openEditor);
+on("backToMenu","onclick",()=>{ showScreen("menu"); boot(); });
+on("btnClubs","onclick",()=> ED.openClubBrowser(world));
+on("btnMenu","onclick",async()=>{
   try{ await S.saveGame(world); toast("Jogo salvo"); }catch(e){}
   showScreen("menu"); boot();
-};
+});
 boot();
