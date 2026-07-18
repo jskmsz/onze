@@ -38,7 +38,7 @@ function renderClubGrid(){
     const card = el("div","clubcard");
     card.innerHTML = `<div style="height:40px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center">${badgeHTML(c,40)}</div>
       <div class="nm">${c.name}</div><div class="cy">${c.city} · ${C.stadiumOf(c).capacity.toLocaleString("pt-BR")} lug.</div>
-      <div class="rep">${"★".repeat(Math.round(c.rep/20))}<span class="muted"> reputação</span></div>`;
+      <div class="rep">${starsHTML(c.prestige)} <span class="muted">${C.reachOf(c.prestige).l}</span></div>`;
     card.onclick = ()=> chooseClub(c.id);
     grid.appendChild(card);
   }
@@ -89,9 +89,17 @@ function migrate(w){
       equipment:Math.round(Math.max(20,Math.min(90,c.rep-15))), intensity:"normal", focus:"geral", individual:{}};
     c.proficiency = c.proficiency || {defense:50, attack:50, possession:50, setPieces:50, penalties:50};
     if(c.badge===undefined) c.badge=null;
+    if(c.prestige==null) c.prestige=c.rep||55;
     for(const v of c.venues){ if(v.pitch==null) v.pitch=Math.round(70+Math.random()*22); if(!v.pitchCare) v.pitchCare="normal"; }
     for(const p of c.squad){ if(p.condition==null) p.condition=100; if(!p.nat) p.nat="dou"; }
   }
+}
+/* estrelas de prestígio (0–5, com meia-estrela) */
+function starsHTML(prestige){
+  const s=C.prestigeStars(prestige), full=Math.floor(s), half=s-full>=0.5;
+  const empty=5-full-(half?1:0);
+  return `<span class="stars" title="Prestígio ${prestige}/100 · ${C.reachOf(prestige).l}">`
+    + "★".repeat(full) + (half?"⯪":"") + "☆".repeat(empty) + "</span>";
 }
 /* escudo do clube: imagem enviada ou caixinha de cor */
 function badgeHTML(c, size=32){
@@ -107,8 +115,8 @@ function rerender(){
   if(done && world.phase!=="offseason") world.phase="offseason";
   const hb=$("hBadge"); hb.style.background="transparent"; hb.style.border="none"; hb.innerHTML=badgeHTML(c,34);
   $("hClub").textContent=c.name;
-  $("hMeta").textContent = done ? `${world.leagueName} · Pré-temporada ${world.season+1}`
-    : `${world.leagueName} · Rodada ${world.round+1} de ${tot} · ${c.tactic}`;
+  $("hMeta").innerHTML = (done ? `${world.leagueName} · Pré-temporada ${world.season+1}`
+    : `${world.leagueName} · Rodada ${world.round+1} de ${tot} · ${c.tactic}`) + ` · ${starsHTML(c.prestige)}`;
   const bal=$("hMoney"); bal.textContent=brl(c.finance.balance); bal.className="v"+(c.finance.balance<0?" neg":"");
   $("btnAdvance").disabled=false;
   $("btnAdvance").textContent = done ? "Pré-temporada ▶" : "Avançar rodada ▶";
@@ -900,6 +908,10 @@ function runRound(played){
     f.result={home:res.home, away:res.away}; homeIds.add(h.id);
     results.push({f,res,h,a});
     for(const club of [h,a]){ const inj=C.rollMatchInjuries(club); if(inj&&club.id===userId) injNews.push(inj); }
+    // resultado recente move a torcida (forma influencia o público mais que o prestígio fixo)
+    const d=res.home-res.away, up=v=>Math.max(30,Math.min(98,v));
+    h.fans=up(h.fans + (d>0?0.7:d<0?-0.7:0.1));
+    a.fans=up(a.fans + (d<0?0.7:d>0?-0.7:0.1));
   }
   // punições por incidentes (multas agora; portões fechados a partir do PRÓXIMO jogo)
   const fines={}, discNews=[];

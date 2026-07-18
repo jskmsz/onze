@@ -209,9 +209,21 @@ export const staffWageTotal = club =>
 export const stadiumOf = club => club.venues[club.venueIdx];
 export const isClosedDoors = club => !!(club.discipline && club.discipline.closedDoors>0);
 
+/* ---------- Prestígio do clube (0–5 estrelas) ---------- */
+export const prestigeStars = p => Math.round((p||0)/20*2)/2;   // 0 a 5, em passos de 0,5
+export const REACH = [
+  {min:88, k:"mundial",    l:"Mundial"},
+  {min:70, k:"continental",l:"Continental"},
+  {min:45, k:"nacional",   l:"Nacional"},
+  {min:22, k:"regional",   l:"Regional"},
+  {min:0,  k:"local",      l:"Local"},
+];
+export const reachOf = p => REACH.find(r=>(p||0)>=r.min);
+
 export function attendanceFactor(club, price=stadiumOf(club).ticketPrice){
   if(isClosedDoors(club)) return 0;                    // portões fechados: ninguém entra
-  return clamp(0.5 + (club.fans-50)/120 - (price-60)/300, 0.2, 1);
+  // torcida (recente, muda com resultados) + prestígio (fama do clube) − preço
+  return clamp(0.48 + (club.fans-50)/120 + ((club.prestige||55)-55)/320 - (price-60)/300, 0.2, 1);
 }
 export function atmosphere(club){
   if(isClosedDoors(club)) return 8;                    // estádio vazio: quase sem clima
@@ -324,7 +336,8 @@ export function roundFinance(club, isHome, fillOverride, fines=0){
 
 /* ---------- Patrocínio ---------- */
 export function sponsorOptions(club){
-  const base = club.rep*3000;
+  // prestígio maior => marcas maiores pagam mais (cresce mais que linear)
+  const base = Math.pow(club.prestige||club.rep, 1.35)*640;
   return [
     {name:"Contrato conservador", perRound:Math.round(base*0.8),  note:"Valor garantido, mais baixo."},
     {name:"Contrato padrão",      perRound:Math.round(base*1.0),  note:"Equilíbrio de risco e retorno."},
@@ -455,6 +468,14 @@ export function payLeaguePrizes(world){
 }
 export function startNewSeason(world){
   const prizes = payLeaguePrizes(world);       // paga ANTES de zerar a tabela
+  // prestígio evolui com a colocação final (1º sobe, últimos caem)
+  const table=computeTable(world), n=table.length;
+  table.forEach((row,i)=>{
+    const c=clubById(world,row.id);
+    const gain = (n-1-i*2)/(n-1) * 3.5;        // 1º ~ +3.5, meio ~ 0, último ~ -3.5
+    c.prestige=Math.round(clamp((c.prestige||55)+gain, 5, 100));
+    c.fans=Math.round(clamp(c.fans + gain*0.8, 30, 98));   // resultado puxa a torcida junto
+  });
   world.season++; world.round=0; world.phase="league";
   world.fixtures = makeSchedule(world.clubs.map(c=>c.id));
   const news=[];
@@ -582,13 +603,14 @@ export function generateWorld(){
       {type:"pista", owned:false, rent:380000, premium:0.18});
     return {
       id:i, name:c.name, short:c.short, color:c.color, city:c.city, rep:c.rep, badge:null,
+      prestige:Math.round(clamp(c.rep+rnd(-5,5),15,95)),
       tactic:"Equilibrado", morale:Math.round(rnd(60,75)), fans:Math.round(clamp(c.rep+rnd(-8,8),40,95)),
       squad, staff,
       venues:[main, old, nat], venueIdx:0,
       training:{fields:Math.max(1,Math.round(c.rep/28)), equipment:Math.round(clamp(c.rep-15,20,90)),
         intensity:"normal", focus:"geral", individual:{}},
       proficiency:{defense:50, attack:50, possession:50, setPieces:50, penalties:50},
-      sponsor:{name:"Contrato padrão", perRound:Math.round(c.rep*3000 + rnd(0,60000))},
+      sponsor:{name:"Contrato padrão", perRound:Math.round(Math.pow(c.rep,1.35)*640 + rnd(0,40000))},
       finance:{ balance: Math.round(c.rep*300000 + rnd(-2e6,4e6)), ledger:[] },
       kit:{pattern:"solid", primary:c.color, secondary:"#eef2f7", image:null},
       lineup:null,
