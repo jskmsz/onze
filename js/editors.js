@@ -198,6 +198,8 @@ export function openWorldEditor(world, opts={}){
         <button id="weExport">⤓ Exportar</button>
         <button id="weImport">⤒ Importar</button>
         <button id="weBulk" title="Importar clubes/jogadores de CSV ou JSON">📥 Importar CSV/JSON</button>
+        <button id="weUndo" title="Desfaz a última importação">↩️ Desfazer importação</button>
+        <button id="weClean" title="Remove clubes vazios criados por engano">🧹 Limpar clubes vazios</button>
         <button id="weRandom" title="Descarta o mundo salvo e sorteia outro">🎲 Aleatório</button>
         <input type="file" id="weFile" accept=".json,application/json" hidden>
         <input type="file" id="weBulkFile" accept=".csv,.json,text/csv,application/json" multiple hidden>
@@ -240,14 +242,27 @@ export function openWorldEditor(world, opts={}){
     }catch(err){ flash("⚠️ Arquivo inválido: "+err.message); }
   };
   $("weRandom").onclick=()=>{ opts.onRandom && opts.onRandom(); };
+  $("weUndo").onclick=()=>{ opts.onUndo && opts.onUndo(ok=>{
+    flash(ok?"↩️ Importação desfeita.":"Nada para desfazer."); sel=world.clubs[0]?.id ?? 0; render(); }); };
+  $("weClean").onclick=()=>{
+    const antes=world.clubs.length;
+    const vazios=world.clubs.filter(c=>/^Clube \d+$/.test(c.name));
+    if(!vazios.length){ flash("Nenhum clube gerado por engano encontrado."); return; }
+    if(!confirm(`Remover ${vazios.length} clube(s) com nome automático "Clube N"?`)) return;
+    opts.onRemove && opts.onRemove(vazios.map(c=>c.id), ()=>{
+      flash(`🧹 ${antes-world.clubs.length} clube(s) removido(s).`);
+      sel=world.clubs[0]?.id ?? 0; render(); });
+  };
   $("weBulk").onclick=()=>$("weBulkFile").click();
   $("weBulkFile").onchange=async e=>{
     const files=[...e.target.files]; if(!files.length) return;
     const payload=[]; for(const f of files) payload.push({name:f.name, text:await f.text()});
-    opts.onBulk && opts.onBulk(payload, rep=>{
-      flash(`✅ ${rep.clubs} clube(s) e ${rep.players} jogador(es) importados`
-        + (rep.warnings.length?` · ${rep.warnings.length} aviso(s): ${rep.warnings[0]}`:""));
-      sel=world.clubs[world.clubs.length-1]?.id ?? sel;
+    opts.onBulk && opts.onBulk(payload, sel, rep=>{
+      let msg=`✅ ${rep.clubs} clube(s) e ${rep.players} jogador(es) importados`;
+      if(rep.newNations?.length) msg+=` · nações novas: ${rep.newNations.join(", ")}`;
+      if(rep.warnings.length) msg+=` · ⚠️ ${rep.warnings[0]}`;
+      flash(msg);
+      if(rep.clubs) sel=world.clubs[world.clubs.length-1]?.id ?? sel;
       render();
     });
     e.target.value="";
@@ -300,7 +315,15 @@ export function openWorldEditor(world, opts={}){
       <div class="sub" style="margin-top:8px">${near.length
         ? "Rival próximo: <b>"+near.map(r=>esc(r.name)).join(", ")+"</b> (vira clássico)"
         : "Sem rival num raio de 35 km."}</div>
-      <button class="primary" id="wSave" style="margin-top:10px">Salvar clube</button>`;
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="primary" id="wSave">Salvar clube</button>
+        <button id="wDelete" style="color:var(--red);border-color:var(--red)">🗑 Excluir clube</button>
+      </div>`;
+    $("wDelete").onclick=()=>{
+      if(world.clubs.length<=4){ alert("O mundo precisa de pelo menos 4 clubes."); return; }
+      if(!confirm(`Excluir "${c.name}" e todo o elenco dele?`)) return;
+      opts.onRemove && opts.onRemove([c.id], ()=>{ sel=world.clubs[0].id; render(); });
+    };
     $("wPrest").oninput=e=>{ e.target.previousElementSibling.textContent="Prestígio "+e.target.value; };
     $("wFans").oninput=e=>{ e.target.previousElementSibling.textContent="Torcida "+e.target.value; };
     $("wBadge").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader();

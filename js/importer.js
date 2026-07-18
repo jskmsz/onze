@@ -6,7 +6,7 @@
    ===================================================================== */
 import * as C from "./core.js";
 import * as K from "./kit.js";
-import { parseBrandsCSV as parseCSV } from "./brands.js";
+import { parseBrandsCSV as parseCSV, parseCSVRaw } from "./brands.js";
 
 /* vazio/ausente → valor padrão (Number("") é 0 e já causou população zerada) */
 const num = (v,d=null)=>{
@@ -34,6 +34,37 @@ const ARCH = {
   ATA:{finishing:17, positioning:13, technique:7, pace:7, strength:5, tackling:-17, marking:-19, passing:-6, goalkeeping:-45},
 };
 const POS_OK = ["GOL","ZAG","LAT","VOL","MEI","PON","ATA"];
+const POS_SET = new Set(POS_OK);
+
+/* ---------- CSV sem cabeçalho ----------
+   Muita planilha vai sair sem a linha de títulos. Em vez de estragar o
+   mundo, descobrimos o formato olhando os dados.                        */
+const HEAD_WORDS = new Set(["name","nome","club","clube","pos","posicao","posição",
+  "age","idade","nat","nacionalidade","overall","geral","potential","potencial",
+  "short","sigla","city","cidade","citypop","founded","color","cor","prestige","fans",
+  "x","y","badge","stadium","capacity", ...C.ATTRS]);
+
+export function looksLikeHeader(cells){
+  const hits=cells.filter(c=>HEAD_WORDS.has(String(c).trim().toLowerCase())).length;
+  return hits>=2;
+}
+/* Descobre a ordem das colunas de um CSV de jogadores sem cabeçalho.
+   Usa a coluna de POSIÇÃO (GOL/ZAG/...) como âncora.                   */
+export function detectPlayerLayout(rows){
+  const sample=rows.slice(0,6);
+  let posIdx=-1;
+  for(let i=0;i<(sample[0]||[]).length;i++){
+    if(sample.every(r=>POS_SET.has(String(r[i]||"").trim().toUpperCase()))){ posIdx=i; break; }
+  }
+  if(posIdx===-1) return null;
+  // posIdx 1 => name,pos,...   |   posIdx 2 => club,name,pos,...
+  const base = posIdx===2 ? ["club","name","pos"] : posIdx===1 ? ["name","pos"] : null;
+  if(!base) return null;
+  return [...base, "age", "nat", "overall", "potential"];
+}
+function rowsToObjects(rawRows, cols){
+  return rawRows.map(r=>{ const o={}; cols.forEach((c,i)=>{ if(r[i]!==undefined) o[c]=String(r[i]).trim(); }); return o; });
+}
 
 /* Gera os 12 atributos a partir de overall+posição e depois calibra
    para que o `overall` final bata com o que você pediu.               */
@@ -108,8 +139,8 @@ export function makeClubFrom(row, i, tplClub){
 /* ---------- entrada principal ----------
    Aceita: JSON {clubs:[{...,players:[...]}]}  |  CSV de clubes  |  CSV de jogadores
    Devolve um relatório do que foi feito.                                 */
-export function importData(world, files){
-  const report={clubs:0, players:0, warnings:[]};
+export function importData(world, files, opts={}){
+  const report={clubs:0, players:0, warnings:[], newNations:[]};
   let nextId = 1 + world.clubs.reduce((m,c)=>Math.max(m, ...c.squad.map(p=>p.id||0), 0), 0);
   const idFn=()=>nextId++;
   const tpl = world.clubs[0];
@@ -138,16 +169,50 @@ export function importData(world, files){
       });
       continue;
     }
-    const rows = parseCSV(txt);
-    if(!rows.length){ report.warnings.push(`${f.name}: vazio`); continue; }
-    const head = Object.keys(rows[0]);
-    const isPlayers = head.includes("club") && (head.includes("pos")||head.includes("overall"));
-    if(isPlayers){
-      for(const r of rows){
-        const club = byName(F(r,"club"));
-        if(!club){ report.warnings.push(`Clube não encontrado: "${F(r,"club")}" (jogador ${F(r,"name")})`); continue; }
-        club.squad.push(makePlayerFrom(r, idFn)); report.players++;
+    const raw = parseCSVRaw(txt);
+    if(!raw.length){ report.warnings.push(`${f.name}: vazio`); continue; }
+
+    let rows, isPlayers;
+    if(looksLikeHeader(raw[0])){
+      rows = parseCSV(txt);
+      const head = Object.keys(rows[0]||{});
+      isPlayers = (head.includes("pos") || head.includes("overall")) &&
+                  !head.includes("capacity") && !head.includes("stadium");
+    } else {
+      // sem cabeçalho: tenta ler como jogadores pela coluna de posição
+      const cols = detectPlayerLayout(raw);
+      if(!cols){
+        report.warnings.push(`${f.name}: não consegui entender o formato — `
+          + `inclua a linha de cabeçalho (ex.: club,name,pos,age,nat,overall,potential)`);
+        continue;
       }
+      rows = rowsToObjects(raw, cols);
+      isPlayers = true;
+      report.warnings.push(`${f.name}: sem cabeçalho — assumi ${cols.join(",")}`);
+    }
+
+    if(isPlayers){
+      // clube alvo: coluna club > nome do arquivo > clube selecionado no editor
+      const fromFile = byName(String(f.name).replace(/\.[^.]+$/,"").trim());
+      const fallback = fromFile || (opts.defaultClubId!=null ? world.clubs.find(c=>c.id===opts.defaultClubId) : null);
+      let missing=0;
+      for(const r of rows){
+        const key=F(r,"club");
+        const club = key ? byName(key) : fallback;
+        if(!club){
+          if(key) report.warnings.push(`Clube não encontrado: "${key}" (jogador ${F(r,"name")})`);
+          else missing++;
+          continue;
+        }
+        const p=makePlayerFrom(r, idFn);
+        // nacionalidade desconhecida vira uma nação personalizada (não some)
+        if(p.nat && !C.NATIONS[p.nat]){
+          C.registerNation(p.nat);
+          if(!report.newNations.includes(p.nat)) report.newNations.push(p.nat);
+        }
+        club.squad.push(p); report.players++;
+      }
+      if(missing) report.warnings.push(`${missing} jogador(es) sem clube — selecione um clube na lista antes de importar`);
     } else {
       for(const r of rows){
         const c = makeClubFrom(r, world.clubs.length, tpl);

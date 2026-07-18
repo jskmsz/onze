@@ -128,6 +128,16 @@ for(const entry of WORLD_COUNTRIES.split("|")){
 const ALIAS={fr:"fra", ie:"irl", is:"isl", es:"esp", pt:"por", no:"nor"};
 for(const [iso,old] of Object.entries(ALIAS)) if(NATIONS[iso]) NATIONS[iso].alias=old;
 
+/* nações inventadas (ex.: "ull", "gua"): entram no elenco sem virar Dournéa */
+export function registerNation(code, name, flag){
+  const k=String(code).toLowerCase().trim(); if(!k) return null;
+  if(!NATIONS[k]){
+    NATIONS[k]={flag: flag || (k.length===2?ISO_FLAG(k):"🏴"), name: name || k.toUpperCase(), weight:0, custom:true};
+    NATION_LIST.push({key:k, name:NATIONS[k].name, flag:NATIONS[k].flag});
+    NATION_LIST.sort((a,b)=> a.key==="dou" ? -1 : b.key==="dou" ? 1 : a.name.localeCompare(b.name,"pt"));
+  }
+  return NATIONS[k];
+}
 export const NATION_LIST = Object.entries(NATIONS)
   .map(([k,n])=>({key:k, name:n.name, flag:n.flag}))
   .sort((a,b)=> a.key==="dou" ? -1 : b.key==="dou" ? 1 : a.name.localeCompare(b.name,"pt"));

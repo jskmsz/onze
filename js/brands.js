@@ -292,6 +292,24 @@ export function brandsToCSV(){
     .concat(BRANDS.map(b=>BRAND_FIELDS.map(f=>esc(b[f])).join(",")))
     .join("\n");
 }
+/* divide o CSV em linhas/células cruas, SEM assumir cabeçalho */
+export function parseCSVRaw(text){
+  const rows=[]; let row=[], cell="", q=false;
+  const s=String(text).replace(/\r\n?/g,"\n");
+  for(let i=0;i<s.length;i++){
+    const ch=s[i];
+    if(q){
+      if(ch==='"' && s[i+1]==='"'){ cell+='"'; i++; }
+      else if(ch==='"') q=false;
+      else cell+=ch;
+    } else if(ch==='"') q=true;
+    else if(ch===","||ch===";"){ row.push(cell); cell=""; }
+    else if(ch==="\n"){ row.push(cell); rows.push(row); row=[]; cell=""; }
+    else cell+=ch;
+  }
+  if(cell||row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(r=>r.some(c=>String(c).trim()));
+}
 export function parseBrandsCSV(text){
   const rows=[]; let row=[], cell="", q=false;
   const s=String(text).replace(/\r\n?/g,"\n");

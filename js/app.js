@@ -1687,6 +1687,7 @@ function draftWorld(){
   return window.__draft;
 }
 on("mClubs","onclick",()=> ED.openClubBrowser(world||draftWorld()));
+let undoSnapshot=null;
 function openEditor(){
   ED.openWorldEditor(draftWorld(), {
     allowPlayers:true,
@@ -1695,11 +1696,28 @@ function openEditor(){
       saveWorldTemplate(window.__draft); $("modalHost").innerHTML=""; openEditor(); },
     onRandom:()=>{ clearWorldTemplate(); window.__draft=C.generateWorld(); migrate(window.__draft);
       $("modalHost").innerHTML=""; openEditor(); toast("Mundo aleatório gerado"); },
-    onBulk:(files, done)=>{
+    onBulk:(files, selectedId, done)=>{
       const w=draftWorld();
-      const rep=IMP.importData(w, files);
+      undoSnapshot = JSON.parse(JSON.stringify(C.worldTemplate(w)));   // ponto de retorno
+      const rep=IMP.importData(w, files, {defaultClubId:selectedId});
       migrate(w); saveWorldTemplate(w);
       done(rep);
+    },
+    onUndo:(done)=>{
+      if(!undoSnapshot){ done(false); return; }
+      window.__draft=C.worldFromTemplate(undoSnapshot);
+      migrate(window.__draft); saveWorldTemplate(window.__draft);
+      undoSnapshot=null; done(true);
+    },
+    onRemove:(ids, done)=>{
+      const w=draftWorld();
+      undoSnapshot = JSON.parse(JSON.stringify(C.worldTemplate(w)));
+      const set=new Set(ids);
+      w.clubs = w.clubs.filter(c=>!set.has(c.id));
+      w.clubs.forEach((c,i)=>c.id=i);                                  // reindexa
+      w.fixtures = C.makeSchedule(w.clubs.map(c=>c.id));
+      w.round=0;
+      saveWorldTemplate(w); done();
     },
   });
 }
