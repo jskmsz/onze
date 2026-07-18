@@ -215,6 +215,7 @@ export function openWorldEditor(world, opts={}){
         <div class="kit-tabs">
           <div class="tab ${tab==="clube"?"active":""}" data-t="clube">Clube</div>
           <div class="tab ${tab==="jogadores"?"active":""}" data-t="jogadores">Jogadores</div>
+          <div class="tab ${tab==="patrocinios"?"active":""}" data-t="patrocinios">Patrocínios</div>
         </div>
         <div class="we-body" id="wePane"></div>
       </div>
@@ -281,7 +282,7 @@ export function openWorldEditor(world, opts={}){
       t.classList.toggle("active", t.dataset.t===tab);
       t.onclick=()=>{ tab=t.dataset.t; render(); };
     });
-    (tab==="clube"?paneClub:panePlayers)();
+    (tab==="clube"?paneClub : tab==="jogadores"?panePlayers : paneSponsors)();
     drawMap($("weMap"), world, {selected:sel});
     $("weMap").onclick=ev=>{
       const p=mapClickCoords($("weMap"), ev);
@@ -345,6 +346,59 @@ export function openWorldEditor(world, opts={}){
       render();
     };
   }
+  /* Patrocínios do clube: escolhe a marca por slot, valor e duração.
+     Fica salvo em club.sponsors, igual ao elenco.                     */
+  function paneSponsors(){
+    const c=C.clubById(world,sel);
+    c.sponsors = c.sponsors || {};
+    const total=BR.sponsorIncome(c);
+    const rows=BR.SLOT_KEYS.map(key=>{
+      const S=BR.SPONSOR_SLOTS[key], ct=c.sponsors[key];
+      const pool=BR.BRANDS.filter(b=> S.kind==="supplier" ? b.kind==="supplier" : b.kind==="sponsor");
+      const opts=`<option value="">— vago —</option>`+pool.map(b=>
+        `<option value="${b.id}" ${ct&&ct.brandId===b.id?"selected":""}>${esc(b.name)} (${BR.REACH_PT[b.reach]})</option>`).join("");
+      const sug=ct?ct.perRound:0;
+      return `<div class="sp-row">
+        <label title="peso ${S.w}">${S.l}</label>
+        <select data-sp-brand="${key}">${opts}</select>
+        <input type="number" data-sp-val="${key}" value="${sug}" step="1000" title="R$ por rodada">
+        <input type="number" data-sp-sea="${key}" value="${ct?ct.seasonsLeft:2}" min="1" max="10" title="temporadas">
+        <button data-sp-auto="${key}" title="Sugerir valor pelo prestígio">≈</button>
+      </div>`;
+    }).join("");
+    $("wePane").innerHTML=`
+      <div class="sub">Receita atual: <b>${brl(total)}</b>/rodada ·
+        os patrocínios ficam salvos no clube, como o elenco.</div>
+      <div class="sp-head"><span>Slot</span><span>Marca</span><span>R$/rodada</span><span>Temp.</span><span></span></div>
+      <div class="sp-list">${rows}</div>
+      <button class="primary" id="spSave" style="margin-top:10px">Salvar patrocínios</button>
+      <button id="spAuto" style="margin-top:10px">🎲 Preencher automaticamente</button>`;
+
+    $("wePane").querySelectorAll("[data-sp-auto]").forEach(b=> b.onclick=()=>{
+      const key=b.dataset.spAuto;
+      const bid=$("wePane").querySelector(`[data-sp-brand="${key}"]`).value;
+      const brand=BR.brandById(bid);
+      if(!brand){ alert("Escolha uma marca primeiro."); return; }
+      $("wePane").querySelector(`[data-sp-val="${key}"]`).value=BR.slotOffer(c.prestige, brand, key);
+    });
+    $("spAuto").onclick=()=>{ C.autoSponsor(c, 1); opts.onChange&&opts.onChange(world); paneSponsors(); };
+    $("spSave").onclick=()=>{
+      const next={};
+      for(const key of BR.SLOT_KEYS){
+        const bid=$("wePane").querySelector(`[data-sp-brand="${key}"]`).value;
+        if(!bid) continue;
+        const val=+$("wePane").querySelector(`[data-sp-val="${key}"]`).value||0;
+        const sea=+$("wePane").querySelector(`[data-sp-sea="${key}"]`).value||1;
+        const brand=BR.brandById(bid);
+        next[key]={brandId:bid, perRound: val || BR.slotOffer(c.prestige, brand, key),
+          seasonsLeft: Math.max(1,sea), logoColor:(c.sponsors[key]||{}).logoColor||null};
+      }
+      c.sponsors=next;
+      opts.onChange&&opts.onChange(world);
+      paneSponsors();
+    };
+  }
+
   function panePlayers(){
     const c=C.clubById(world,sel);
     if(!canEditPlayers){

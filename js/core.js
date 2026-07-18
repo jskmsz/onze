@@ -60,7 +60,14 @@ const STAFF_FIRST = ["Dr. Le Bris","Prof. Kerouédan","Yann-Ber","Job Caradec","
 
 /* ---------- Nacionalidades (maioria dournéa, um tempero estrangeiro) ---------- */
 export const NATIONS = {
-  dou:{flag:"🔵", name:"Dournéa",  first:FIRST, last:LAST, weight:70},
+  dou:{flag:"🔵", name:"Dournéa",  first:FIRST, last:LAST, weight:70, fictional:true},
+  /* vizinhas fictícias de Dournéa */
+  ull:{flag:"🟣", name:"Ullanne", weight:7, fictional:true,
+    first:["Cador","Rian","Cillian","Ewan","Dermot","Aodhán","Fergal","Lorcan","Faelan","Bran","Cathal","Ruairi","Enna","Marcan"],
+    last:["Sindyé","MacTyre","O'Connor","MacBrenn","Dunhar","Kearnan","O'Faelan","MacLir","Ardagh","Ennis","Corrigan","Maelor","Rathcarn"]},
+  gua:{flag:"🟠", name:"Guai", weight:5, fictional:true,
+    first:["Tuan","Rawiri","Manu","Tane","Kahu","Ari","Nikau","Rangi","Teva","Kai","Hemi","Matai","Rongo"],
+    last:["Heke","Toa","Ngata","Waititi","Tepania","Kahurangi","Rewi","Mataki","Puna","Vaea","Tanoa","Ruatara","Marama"]},
   fra:{flag:"🇫🇷", name:"França",   weight:9,
     first:["Antoine","Lucas","Hugo","Théo","Mathis","Nathan","Enzo","Clément","Baptiste","Rémi","Florian","Julien"],
     last:["Martin","Bernard","Dubois","Moreau","Laurent","Girard","Fontaine","Rousseau","Blanc","Garnier","Faure","Chevalier"]},
@@ -128,13 +135,23 @@ for(const entry of WORLD_COUNTRIES.split("|")){
 const ALIAS={fr:"fra", ie:"irl", is:"isl", es:"esp", pt:"por", no:"nor"};
 for(const [iso,old] of Object.entries(ALIAS)) if(NATIONS[iso]) NATIONS[iso].alias=old;
 
-/* nações inventadas (ex.: "ull", "gua"): entram no elenco sem virar Dournéa */
+/* nações inventadas por você: ficam guardadas junto do mundo */
+export const CUSTOM_NATIONS = {};
 export function registerNation(code, name, flag){
   const k=String(code).toLowerCase().trim(); if(!k) return null;
   if(!NATIONS[k]){
     NATIONS[k]={flag: flag || (k.length===2?ISO_FLAG(k):"🏴"), name: name || k.toUpperCase(), weight:0, custom:true};
-    NATION_LIST.push({key:k, name:NATIONS[k].name, flag:NATIONS[k].flag});
-    NATION_LIST.sort((a,b)=> a.key==="dou" ? -1 : b.key==="dou" ? 1 : a.name.localeCompare(b.name,"pt"));
+    CUSTOM_NATIONS[k]={name:NATIONS[k].name, flag:NATIONS[k].flag};
+    if(typeof NATION_LIST!=="undefined"){
+      NATION_LIST.push({key:k, name:NATIONS[k].name, flag:NATIONS[k].flag});
+      NATION_LIST.sort((a,b)=> a.key==="dou" ? -1 : b.key==="dou" ? 1 : a.name.localeCompare(b.name,"pt"));
+    }
+  } else if(name || flag){                       // renomear/trocar bandeira
+    if(name) NATIONS[k].name=name;
+    if(flag) NATIONS[k].flag=flag;
+    if(NATIONS[k].custom) CUSTOM_NATIONS[k]={name:NATIONS[k].name, flag:NATIONS[k].flag};
+    const e=NATION_LIST && NATION_LIST.find(x=>x.key===k);
+    if(e){ e.name=NATIONS[k].name; e.flag=NATIONS[k].flag; }
   }
   return NATIONS[k];
 }
@@ -795,10 +812,12 @@ export function worldTemplate(world){
     season: world.season,
     leagueName: world.leagueName,
     customFormations: world.customFormations||[],
+    customNations: {...CUSTOM_NATIONS},          // nações inventadas viajam junto
     clubs: JSON.parse(JSON.stringify(world.clubs)),
   };
 }
 export function worldFromTemplate(tpl){
+  for(const [k,n] of Object.entries(tpl.customNations||{})) registerNation(k, n.name, n.flag);
   const clubs = JSON.parse(JSON.stringify(tpl.clubs));
   clubs.forEach((c,i)=>{ if(c.id==null) c.id=i; });
   const w = { clubs, fixtures: makeSchedule(clubs.map(c=>c.id)),
