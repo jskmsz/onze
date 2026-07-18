@@ -5,6 +5,7 @@ import * as C from "./core.js";
 import * as S from "./storage.js";
 import * as K from "./kit.js";
 import * as BR from "./brands.js";
+import * as ED from "./editors.js";
 import { ATTR_PT, STAFF_ROLES } from "./core.js";
 
 let world, userId, view="tabela", calRound=0, finTab="overview", market=null;
@@ -50,7 +51,10 @@ async function boot(){
   }catch(e){ $("mSaveInfo").textContent="Nenhuma carreira salva."; }
 }
 function newGame(){
-  world = C.generateWorld(); migrate(world);
+  // se você editou o mundo no menu, a carreira começa com ele
+  world = window.__draft || C.generateWorld();
+  window.__draft = null;
+  migrate(world);
   renderClubGrid(); showScreen("start");
 }
 function renderClubGrid(){
@@ -111,6 +115,9 @@ function migrate(w){
     c.proficiency = c.proficiency || {defense:50, attack:50, possession:50, setPieces:50, penalties:50};
     if(c.badge===undefined) c.badge=null;
     if(c.prestige==null) c.prestige=c.rep||55;
+    if(!c.founded) c.founded=1900+Math.floor(Math.random()*60);
+    if(!c.cityPop) c.cityPop=(C.CITIES[c.city]||{}).pop||120000;
+    if(!c.coords){ const ct=C.CITIES[c.city]||{}; c.coords={x:ct.x??Math.random(), y:ct.y??Math.random()}; }
     c.sponsors = c.sponsors || {};
     if(!c.kitDesign)    c.kitDesign    = K.defaultKitDesign(c,false);
     if(!c.kitDesignAlt) c.kitDesignAlt = K.defaultKitDesign(c,true);
@@ -1531,7 +1538,16 @@ $("mContinue").onclick=async()=>{
 };
 $("mImport").onclick=()=> $("importFile").click();
 $("mBrands").onclick=()=> openBrandEditor();
+/* mundo "de pré-jogo": gerado sob demanda para navegar/editar antes da carreira */
+function draftWorld(){
+  if(!window.__draft){ window.__draft=C.generateWorld(); migrate(window.__draft); }
+  return window.__draft;
+}
+$("mClubs").onclick=()=> ED.openClubBrowser(world||draftWorld());
+$("mEditor").onclick=()=> ED.openWorldEditor(draftWorld(), {allowPlayers:true,
+  onChange:()=>{}, onClose:()=>{} });
 $("backToMenu").onclick=()=>{ showScreen("menu"); boot(); };
+$("btnClubs").onclick=()=> ED.openClubBrowser(world);
 $("btnMenu").onclick=async()=>{
   try{ await S.saveGame(world); toast("Jogo salvo"); }catch(e){}
   showScreen("menu"); boot();

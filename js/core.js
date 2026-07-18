@@ -93,24 +93,58 @@ function pickNation(){
 export const flagOf = p => (NATIONS[p.nat]||NATIONS.dou).flag;
 export const nationName = p => (NATIONS[p.nat]||NATIONS.dou).name;
 
+/* ---------- Geografia de Dournéa ----------
+   x,y são normalizados (0–1) sobre a imagem do mapa; o mapa cobre ~520x700 km.
+   Cidades próximas (<35 km) geram clássicos regionais.                      */
+export const MAP_KM = {w:520, h:700};
+export const CITIES = {
+  "Kervadan":   {pop:840000, x:0.46, y:0.34},
+  "Landivael":  {pop:190000, x:0.485,y:0.365},   // vizinha da capital → dérbi
+  "Gwenmor":    {pop:610000, x:0.29, y:0.55},
+  "Ker-Ys":     {pop:430000, x:0.17, y:0.30},
+  "Plouarnel":  {pop:355000, x:0.62, y:0.22},
+  "Lanhouarne": {pop:280000, x:0.38, y:0.70},
+  "Tregonan":   {pop:245000, x:0.72, y:0.48},
+  "Morlaven":   {pop:300000, x:0.22, y:0.76},
+  "Roc'halen":  {pop:165000, x:0.58, y:0.63},
+  "Brocéliande":{pop:120000, x:0.44, y:0.50},
+  "Kerdrec'h":  {pop:150000, x:0.80, y:0.68},
+  "Sant-Konan": {pop:205000, x:0.34, y:0.18},
+  "Aravon":     {pop:88000,  x:0.66, y:0.85},
+  "Penant":     {pop:62000,  x:0.12, y:0.60},
+  "Lannedis":   {pop:47000,  x:0.55, y:0.90},
+  "Penmarc'hen":{pop:38000,  x:0.86, y:0.30},
+};
 const CLUBS = [
-  {name:"Stade Kervadan",     short:"KER", color:"#1f6feb", city:"Kervadan",    rep:82},
-  {name:"Olympique Gwenmor",  short:"GWE", color:"#2ea043", city:"Gwenmor",     rep:80},
-  {name:"AS Ker-Ys",          short:"KYS", color:"#0d9488", city:"Ker-Ys",      rep:78},
-  {name:"Racing Plouarnel",   short:"PLO", color:"#dc2626", city:"Plouarnel",   rep:76},
-  {name:"US Lanhouarne",      short:"LAN", color:"#16a34a", city:"Lanhouarne",  rep:74},
-  {name:"En Avant Tregonan",  short:"TRE", color:"#e11d48", city:"Tregonan",    rep:72},
-  {name:"FC Morlaven",        short:"MOR", color:"#0284c7", city:"Morlaven",    rep:70},
-  {name:"Stade Roc'halen",    short:"ROC", color:"#0891b2", city:"Roc'halen",   rep:68},
-  {name:"AS Brocéliande",     short:"BRO", color:"#15803d", city:"Brocéliande", rep:66},
-  {name:"Kerdrec'h FC",       short:"KDR", color:"#b45309", city:"Kerdrec'h",   rep:64},
-  {name:"Sant-Konan AC",      short:"SKO", color:"#1e3a8a", city:"Sant-Konan",  rep:62},
-  {name:"Union Landivael",    short:"LDV", color:"#7c3aed", city:"Landivael",   rep:60},
-  {name:"Gwennili Aravon",    short:"ARA", color:"#f59e0b", city:"Aravon",      rep:57},
-  {name:"US Penant",          short:"PEN", color:"#475569", city:"Penant",      rep:54},
-  {name:"Korrigan Lannedis",  short:"LND", color:"#4d7c0f", city:"Lannedis",    rep:52},
-  {name:"FC Penmarc'hen",     short:"PMH", color:"#38bdf8", city:"Penmarc'hen", rep:49},
+  {name:"Stade Kervadan",     short:"KER", color:"#1f6feb", city:"Kervadan",    rep:82, founded:1901},
+  {name:"Olympique Gwenmor",  short:"GWE", color:"#2ea043", city:"Gwenmor",     rep:80, founded:1907},
+  {name:"AS Ker-Ys",          short:"KYS", color:"#0d9488", city:"Ker-Ys",      rep:78, founded:1912},
+  {name:"Racing Plouarnel",   short:"PLO", color:"#dc2626", city:"Plouarnel",   rep:76, founded:1904},
+  {name:"US Lanhouarne",      short:"LAN", color:"#16a34a", city:"Lanhouarne",  rep:74, founded:1919},
+  {name:"En Avant Tregonan",  short:"TRE", color:"#e11d48", city:"Tregonan",    rep:72, founded:1922},
+  {name:"FC Morlaven",        short:"MOR", color:"#0284c7", city:"Morlaven",    rep:70, founded:1915},
+  {name:"Stade Roc'halen",    short:"ROC", color:"#0891b2", city:"Roc'halen",   rep:68, founded:1928},
+  {name:"AS Brocéliande",     short:"BRO", color:"#15803d", city:"Brocéliande", rep:66, founded:1931},
+  {name:"Kerdrec'h FC",       short:"KDR", color:"#b45309", city:"Kerdrec'h",   rep:64, founded:1925},
+  {name:"Sant-Konan AC",      short:"SKO", color:"#1e3a8a", city:"Sant-Konan",  rep:62, founded:1936},
+  {name:"Union Landivael",    short:"LDV", color:"#7c3aed", city:"Landivael",   rep:60, founded:1909},
+  {name:"Gwennili Aravon",    short:"ARA", color:"#f59e0b", city:"Aravon",      rep:57, founded:1944},
+  {name:"US Penant",          short:"PEN", color:"#475569", city:"Penant",      rep:54, founded:1951},
+  {name:"Korrigan Lannedis",  short:"LND", color:"#4d7c0f", city:"Lannedis",    rep:52, founded:1948},
+  {name:"FC Penmarc'hen",     short:"PMH", color:"#38bdf8", city:"Penmarc'hen", rep:49, founded:1957},
 ];
+
+/* distância entre dois clubes, em km */
+export function distanceKm(a,b){
+  const A=a.coords||{x:.5,y:.5}, B=b.coords||{x:.5,y:.5};
+  return Math.round(Math.hypot((A.x-B.x)*MAP_KM.w, (A.y-B.y)*MAP_KM.h));
+}
+export const isDerby = (a,b)=> a.city===b.city || distanceKm(a,b)<35;
+/* cidade grande = mais torcida em potencial */
+export const popFactor = club =>
+  clamp(0.78 + Math.log10(Math.max(20000,club.cityPop||100000)/60000)*0.22, 0.72, 1.30);
+/* viagem longa cansa: nada até ~80 km, e até ~9 pontos de condição na travessia do país */
+export const travelWear = km => Math.min(9, Math.max(0, (km-80)/62));
 
 const ARCH = {
   GOL:{goalkeeping:35, positioning:8, pace:-15, dribbling:-20, finishing:-25, passing:-8, tackling:-10, marking:-10},
@@ -228,7 +262,8 @@ export const reachOf = p => REACH.find(r=>(p||0)>=r.min);
 export function attendanceFactor(club, price=stadiumOf(club).ticketPrice){
   if(isClosedDoors(club)) return 0;                    // portões fechados: ninguém entra
   // torcida (recente, muda com resultados) + prestígio (fama do clube) − preço
-  return clamp(0.48 + (club.fans-50)/120 + ((club.prestige||55)-55)/320 - (price-60)/300, 0.2, 1);
+  const base = 0.48 + (club.fans-50)/120 + ((club.prestige||55)-55)/320 - (price-60)/300;
+  return clamp(base * popFactor(club), 0.2, 1);        // cidade grande enche mais
 }
 export function atmosphere(club){
   if(isClosedDoors(club)) return 8;                    // estádio vazio: quase sem clima
@@ -637,6 +672,8 @@ export function generateWorld(){
       {type:"pista", owned:false, rent:380000, premium:0.18});
     return {
       id:i, name:c.name, short:c.short, color:c.color, city:c.city, rep:c.rep, badge:null,
+      founded:c.founded, cityPop:(CITIES[c.city]||{}).pop||120000,
+      coords:{x:(CITIES[c.city]||{}).x??0.5, y:(CITIES[c.city]||{}).y??0.5},
       prestige:Math.round(clamp(c.rep+rnd(-5,5),15,95)),
       tactic:"Equilibrado", morale:Math.round(rnd(60,75)), fans:Math.round(clamp(c.rep+rnd(-8,8),40,95)),
       squad, staff,
@@ -915,15 +952,25 @@ export function matchContext(world, fx){
     else if(ph>=n-3 && pa>=n-3){ stakes+=0.35; label="Duelo contra o rebaixamento"; }
     else if(Math.abs(ph-pa)<=2 && (ph<=6||pa<=6)){ stakes+=0.18; label="Briga direta na parte de cima"; }
   }
-  return {stakes:Math.min(1,stakes), label, posHome:ph, posAway:pa};
+  // clássico: cidades coladas fervem mesmo sem nada em jogo
+  const h=clubById(world,fx.home), a=clubById(world,fx.away);
+  const derby = h&&a&&isDerby(h,a);
+  if(derby){ stakes=Math.min(1,stakes+0.30); label = h.city===a.city
+    ? `Dérbi de ${h.city}` : "Clássico regional"; }
+  return {stakes:Math.min(1,stakes), label, posHome:ph, posAway:pa, derby,
+    travelKm: h&&a ? distanceKm(h,a) : 0};
 }
 
 export class LiveMatch{
   constructor(home, away, ctx){
     this.home=home; this.away=away;
-    // chegam ao jogo com o condicionamento que a semana de treino deixou
+    // chegam ao jogo com o condicionamento do treino; o visitante ainda paga a viagem
     const fitOf=s=> s.player.condition!=null ? s.player.condition : 100;
-    this.xi={ home:getXI(home).map(s=>({...s, fit:fitOf(s)})), away:getXI(away).map(s=>({...s, fit:fitOf(s)})) };
+    this.travelKm = distanceKm(home, away);
+    const wear = travelWear(this.travelKm);
+    this.xi={ home:getXI(home).map(s=>({...s, fit:fitOf(s)})),
+              away:getXI(away).map(s=>({...s, fit:Math.max(30, fitOf(s)-wear)})) };
+    this.travelWear = wear;
     this.tactic={home:home.tactic, away:away.tactic};
     this.subsUsed={home:0, away:0};
     this.subbedOff={home:new Set(), away:new Set()};
@@ -933,7 +980,7 @@ export class LiveMatch{
     this.events=[]; this.scorers=[]; this.finished=false; this.territory=0;
     // clima / caos
     this.ctx = ctx || {stakes:0.25, label:"Jogo de rotina"};
-    this.tension = 15 + this.ctx.stakes*30;      // já começa quente se o jogo vale muito
+    this.tension = 15 + this.ctx.stakes*30 + (this.ctx.derby?12:0);   // dérbi já começa fervendo
     this.incidents=[]; this.invasions=0; this.abandoned=false;
     this.boost={home:1, away:1}; this.boostEnd={home:0, away:0};
     // clima do jogo (roda no estádio do mandante)
