@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Onze — Motor Posicional (protótipo)</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2430;--line:#30363d;--txt:#e6edf3;
+    --muted:#8b949e;--accent:#3fb950;--gold:#d29922;--home:#2f81f7;--away:#f0883e;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans-serif;
+    display:flex;justify-content:center;padding:20px}
+  .app{width:100%;max-width:860px}
+  h1{font-size:20px;margin:0 0 2px}h1 span{color:var(--accent)}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .board{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
+    border-radius:14px;padding:12px 18px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
+  .board .t{font-weight:600}.board .t.a{text-align:right}
+  .board .c{text-align:center}
+  .score{font-size:34px;font-weight:800;letter-spacing:2px}
+  .clock{color:var(--gold);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+  .possbar{height:8px;border-radius:5px;overflow:hidden;display:flex;margin:12px 0 2px;background:var(--line)}
+  .possbar .h{background:var(--home)}.possbar .a{background:var(--away)}
+  .poss{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+  .pitchwrap{border:2px solid #2b6b34;border-radius:10px;overflow:hidden;margin-top:12px}
+  svg{display:block;width:100%;height:auto;background:#3a7d3f}
+  .controls{display:flex;gap:8px;align-items:center;margin-top:12px;padding:12px;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;flex-wrap:wrap}
+  button,select{background:var(--panel2);color:var(--txt);border:1px solid var(--line);padding:8px 14px;
+    border-radius:8px;font-size:13px;cursor:pointer;font-weight:500}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#04260f;font-weight:700}
+  .controls label{font-size:12px;color:var(--muted);margin-left:auto}
+  .log{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);
+    max-height:150px;overflow-y:auto;font-size:13px}
+  .log div{padding:6px 12px;border-bottom:1px solid var(--line)}
+  .foot{color:var(--muted);font-size:12px;margin-top:14px;line-height:1.5}
+  .tag{display:inline-block;background:var(--panel2);border:1px solid var(--line);color:var(--gold);
+    font-size:11px;padding:1px 8px;border-radius:20px;margin-left:6px}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1><span>Onze</span> — motor posicional <span class="tag">protótipo v1</span></h1>
+  <div class="sub">Simulação em tempo real: cada jogador tem posição/velocidade e decide (marcar, pressionar, correr, passar, chutar). Os gols emergem da simulação, não de um sorteio.</div>
+
+  <div class="board">
+    <div class="t h" id="hName">Casa</div>
+    <div class="c"><div class="score"><span id="hg">0</span> : <span id="ag">0</span></div><div class="clock" id="clock">0'</div></div>
+    <div class="t a" id="aName">Visitante</div>
+  </div>
+  <div class="possbar"><div class="h" id="pH" style="width:50%"></div><div class="a" id="pA" style="width:50%"></div></div>
+  <div class="poss"><span id="pHl">Posse 50%</span><span id="pAl">50%</span></div>
+
+  <div class="pitchwrap"><svg id="pitch" viewBox="0 0 105 68" xmlns="http://www.w3.org/2000/svg"></svg></div>
+
+  <div class="controls">
+    <button class="primary" id="btnPlay">▶ Iniciar</button>
+    <button id="btnReset">↺ Reiniciar</button>
+    <label for="speed">Velocidade</label>
+    <select id="speed">
+      <option value="30">1x</option>
+      <option value="60">2x</option>
+      <option value="120" selected>4x</option>
+      <option value="240">8x</option>
+      <option value="480">16x</option>
+    </select>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <div class="foot">
+    <b>É um protótipo bruto de viabilidade.</b> Dá para ver o essencial de um motor posicional: cada jogador tem
+    posição/velocidade, marca, pressiona, corre, passa e chuta, e os gols <i>emergem</i> da simulação (com defesa
+    de goleiro). <b>O placar está inflado de propósito</b> (uns 30 a 30) — equilibrar taxa de perda de bola × conversão
+    para dar ~2-3 gols realistas é justamente a parte difícil, que exige muitas iterações acopladas. Serve para você
+    <b>sentir</b> o caminho FM e decidir se vale o investimento, ou se a "foto do minuto" já entrega o que você quer.
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============ Campo / constantes ============ */
+const W=105, H=68, GY=34, POST=3.66;            // meia-largura do gol ~3.66m
+const HOME_GOAL={x:0,y:GY}, AWAY_GOAL={x:W,y:GY}; // casa defende x=0, ataca x=W
+const DT=0.08;                                   // passo de simulação (s)
+const CONTROL_R=1.9, TACKLE_R=1.6;
+const dist=(ax,ay,bx,by)=>Math.hypot(ax-bx,ay-by);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rand=(a,b)=>a+Math.random()*(b-a);
+
+/* ============ Formação 4-3-3 (base da casa; visitante espelha em x) ============ */
+const FORM=[
+  {role:"GOL",x:5, y:34},
+  {role:"ZAG",x:18,y:22},{role:"ZAG",x:16,y:34},{role:"ZAG",x:18,y:46},{role:"LAT",x:24,y:10},
+  {role:"MEI",x:40,y:20},{role:"MEI",x:38,y:34},{role:"MEI",x:40,y:48},
+  {role:"PON",x:64,y:14},{role:"ATA",x:70,y:34},{role:"PON",x:64,y:54},
+];
+const NAMES_H=["Rildo","Cassiano","Peninha","Douglas","Juninho","Ferrugem","Tobias","Val","Marcinho","Gilmar","Bocão"];
+const NAMES_A=["Everaldo","Adilson","Régis","Naldo","Piti","Paquetá","Danilo","Zé","Wesley","Cebola","Índio"];
+
+/* atributos por papel (0–1 aprox.) */
+function attrsFor(role){
+  const b=()=>rand(0.55,0.9);
+  const a={pace:b(),pass:b(),shot:b(),tech:b(),tackle:b()};
+  if(role==="ATA"||role==="PON"){a.shot=rand(0.7,0.95);a.pace=rand(0.75,0.95);a.tackle=rand(0.3,0.5);}
+  if(role==="ZAG"){a.tackle=rand(0.75,0.95);a.shot=rand(0.2,0.45);a.pace=rand(0.5,0.75);}
+  if(role==="MEI"){a.pass=rand(0.75,0.95);a.tech=rand(0.7,0.9);}
+  if(role==="GOL"){a.pace=rand(0.4,0.6);a.tackle=rand(0.5,0.7);}
+  return a;
+}
+
+/* ============ Estado ============ */
+let players=[], ball=null, score={h:0,a:0}, matchSec=0, possAcc={h:0,a:0};
+let playing=false, lastT=0, ended=false;
+
+function newMatch(){
+  players=[];
+  FORM.forEach((f,i)=>{
+    players.push({id:"h"+i,team:"home",role:f.role,name:NAMES_H[i],
+      base:{x:f.x,y:f.y}, x:f.x,y:f.y, vx:0,vy:0, attr:attrsFor(f.role), decCd:0});
+  });
+  FORM.forEach((f,i)=>{
+    players.push({id:"a"+i,team:"away",role:f.role,name:NAMES_A[i],
+      base:{x:W-f.x,y:f.y}, x:W-f.x,y:f.y, vx:0,vy:0, attr:attrsFor(f.role), decCd:0});
+  });
+  ball={x:W/2,y:GY,vx:0,vy:0,owner:null,cd:0};
+  // saída de bola para a casa
+  const kicker=players.find(p=>p.role==="MEI"&&p.team==="home");
+  ball.owner=kicker.id; ball.x=kicker.x; ball.y=kicker.y;
+  score={h:0,a:0}; matchSec=0; possAcc={h:0,a:0}; ended=false;
+  buildPitch();
+  log("Bola rolando!");
+}
+
+const P=id=>players.find(p=>p.id===id);
+const oppGoal=t=> t==="home"?AWAY_GOAL:HOME_GOAL;
+const fwd=t=> t==="home"?1:-1;             // sentido de ataque em x
+function nearest(list, x, y){ let best=null,bd=1e9; for(const p of list){const d=dist(p.x,p.y,x,y); if(d<bd){bd=d;best=p;}} return {p:best,d:bd}; }
+
+/* ============ Simulação: 1 passo ============ */
+function step(){
+  if(ended) return;
+  ball.cd-=DT;
+  // posse acumulada
+  if(ball.owner){ possAcc[P(ball.owner).team==="home"?"h":"a"]+=DT; }
+
+  /* --- bola --- */
+  if(ball.owner){
+    const o=P(ball.owner);
+    // bola fica à frente do dono no sentido de ataque
+    ball.x=o.x+fwd(o.team)*0.8; ball.y=o.y; ball.vx=0; ball.vy=0;
+    o.decCd-=DT;
+    if(o.decCd<=0){ decide(o); o.decCd=0.25; }
+  } else {
+    ball.x+=ball.vx*DT; ball.y+=ball.vy*DT;
+    ball.vx*=0.985; ball.vy*=0.985;
+    const spd=Math.hypot(ball.vx,ball.vy);
+    // gol / defesa ANTES de tratar linha de fundo (senão a bola é presa antes de cruzar a linha)
+    if(ball.x<=0.3 && Math.abs(ball.y-GY)<POST){ tryGoal("away"); }
+    else if(ball.x>=W-0.3 && Math.abs(ball.y-GY)<POST){ tryGoal("home"); }
+    else{
+      // controle: bolas rápidas (chutes) são difíceis de dominar; goleiro domina melhor
+      if(ball.cd<=0){
+        const {p,d}=nearest(players, ball.x, ball.y);
+        if(p && d<CONTROL_R){
+          let cp=(0.55+p.attr.tech*0.35)*clamp(1-spd/60,0.25,1);
+          if(p.role==="GOL") cp=Math.max(cp,0.7);
+          if(Math.random()<cp){ ball.owner=p.id; ball.target=null; ball.vx=ball.vy=0; }
+        }
+      }
+      // fora de campo → reinício rápido: bola vai ao jogador mais próximo (lateral / tiro de meta)
+      if(ball.x<0||ball.x>W||ball.y<0||ball.y>H){
+        ball.x=clamp(ball.x,2,W-2); ball.y=clamp(ball.y,2,H-2); ball.vx=ball.vy=0;
+        const {p}=nearest(players,ball.x,ball.y); ball.owner=p.id; ball.target=null; ball.cd=0.15;
+      }
+    }
+  }
+
+  /* --- decisões de posição de cada jogador --- */
+  const ownerTeam = ball.owner? P(ball.owner).team : null;
+  // presser: defensor mais próximo do dono
+  let presserId=null;
+  if(ownerTeam){
+    const def=players.filter(p=>p.team!==ownerTeam);
+    const o=P(ball.owner); presserId=nearest(def,o.x,o.y).p.id;
+  }
+  // chaser: se bola solta, jogador mais próximo de cada time persegue
+  let chaserId=null;
+  if(!ball.owner){ chaserId=nearest(players,ball.x,ball.y).p.id; }
+
+  for(const p of players){
+    let tx=p.base.x, ty=p.base.y;
+    if(p.role==="GOL"){
+      tx = p.team==="home"?4:W-4; ty=clamp(ball.y,26,42);
+    } else if(ball.owner && P(ball.owner).id===p.id){
+      // dono: alvo definido em decide()
+      tx=p.tx!=null?p.tx:p.x; ty=p.ty!=null?p.ty:p.y;
+    } else if(ownerTeam===p.team){
+      // atacando: sobe e ocupa espaço
+      tx=p.base.x+fwd(p.team)*10 + (ball.x-p.base.x)*0.12;
+      ty=p.base.y+(ball.y-p.base.y)*0.18;
+    } else if(ownerTeam){
+      // defendendo
+      if(p.id===presserId){ const o=P(ball.owner); tx=o.x - fwd(p.team)*1.0; ty=o.y; }
+      else { tx=p.base.x - fwd(p.team)*4 + (ball.x-p.base.x)*0.22; ty=p.base.y+(ball.y-p.base.y)*0.28; }
+    } else {
+      // bola solta: destinatário do passe e o mais próximo vão buscar (antecipando a trajetória)
+      if(p.id===ball.target || p.id===chaserId){ tx=ball.x+ball.vx*0.25; ty=ball.y+ball.vy*0.25; }
+      else { tx=p.base.x+(ball.x-p.base.x)*0.1; ty=p.base.y+(ball.y-p.base.y)*0.1; }
+    }
+    moveToward(p,tx,ty);
+  }
+  separate();
+  for(const p of players){ p.x=clamp(p.x,0,W); p.y=clamp(p.y,0,H); }
+
+  /* --- desarme --- */
+  if(ball.owner && presserId && ball.cd<=0){
+    const d=P(presserId), o=P(ball.owner);
+    if(dist(d.x,d.y,o.x,o.y)<TACKLE_R){
+      const pWin = d.attr.tackle/(d.attr.tackle+o.attr.tech);
+      if(Math.random() < pWin*0.05){ ball.owner=d.id; ball.cd=0.15; o.decCd=0.2; log(`${d.name} desarma`); }
+    }
+  }
+
+  matchSec+=DT;
+  if(matchSec>=90*60){ ended=true; playing=false; log("Fim de jogo!"); updateUI(); }
+}
+
+function moveToward(p,tx,ty){
+  const dx=tx-p.x, dy=ty-p.y, d=Math.hypot(dx,dy);
+  if(d<0.1) return;
+  const sp=(3.2+p.attr.pace*4.5);           // m/s
+  p.x+=dx/d*sp*DT; p.y+=dy/d*sp*DT;
+}
+function separate(){
+  for(let i=0;i<players.length;i++)for(let j=i+1;j<players.length;j++){
+    const a=players[i],b=players[j], d=dist(a.x,a.y,b.x,b.y);
+    if(d<2.2 && d>0.01){ const push=(2.2-d)/2*0.5, dx=(a.x-b.x)/d, dy=(a.y-b.y)/d;
+      a.x+=dx*push; a.y+=dy*push; b.x-=dx*push; b.y-=dy*push; }
+  }
+}
+
+/* ============ Decisão do dono da bola ============ */
+function decide(o){
+  const g=oppGoal(o.team), d2g=dist(o.x,o.y,g.x,g.y);
+  const opp=players.filter(p=>p.team!==o.team);
+  const press=nearest(opp,o.x,o.y).d;
+
+  // 0) sob pressão forte pode perder o controle (gera disputa e viradas de posse)
+  if(press<1.7 && Math.random()<0.03){
+    ball.owner=null; ball.cd=0.1; ball.x=o.x; ball.y=o.y;
+    const a=Math.random()*6.283; ball.vx=Math.cos(a)*7; ball.vy=Math.sin(a)*7; return;
+  }
+
+  // 1) chutar? (só de boa posição e com pouca pressão — senão jogo vira pinball)
+  if(d2g<18 && press>1.5){
+    const chance=clamp((18-d2g)/18,0,1)*(0.09+o.attr.shot*0.11);
+    if(Math.random()<chance){ shoot(o,g); return; }
+  }
+  // 2) passar? procura melhor companheiro à frente e livre
+  const mates=players.filter(p=>p.team===o.team && p.id!==o.id);
+  let best=null,bestScore=-1;
+  for(const m of mates){
+    const md2g=dist(m.x,m.y,g.x,g.y);
+    const progress=(d2g-md2g);                 // quanto adianta
+    const open=nearest(opp,m.x,m.y).d;
+    const rng=dist(o.x,o.y,m.x,m.y);
+    if(rng>42||rng<4) continue;
+    const sc=progress*1.2 + open*1.5 - rng*0.15;
+    if(sc>bestScore){bestScore=sc;best=m;}
+  }
+  if(best && (press<5 || Math.random()<0.55) && bestScore>2){ pass(o,best); return; }
+
+  // 3) conduzir em direção ao gol, desviando do marcador
+  const dirx=(g.x-o.x), diry=(g.y-o.y), dl=Math.hypot(dirx,diry)||1;
+  let tx=o.x+dirx/dl*12, ty=o.y+diry/dl*12;
+  const mk=nearest(opp,o.x,o.y);
+  if(mk.d<6){ ty += (o.y<mk.p.y?-1:1)*6; }     // desvia lateralmente
+  o.tx=clamp(tx,2,W-2); o.ty=clamp(ty,2,H-2);
+}
+function pass(from,to){
+  ball.owner=null; ball.cd=0.12; ball.target=to.id;
+  const lead=1.2;
+  let ax=to.x+ (to.x-from.x)*0.02*lead, ay=to.y;
+  const dx=ax-from.x, dy=ay-from.y, d=Math.hypot(dx,dy)||1;
+  const acc=(1-from.attr.pass); const ang=Math.atan2(dy,dx)+(Math.random()-0.5)*acc*0.5;
+  const spd=clamp(d*1.4,14,26);
+  ball.x=from.x+fwd(from.team)*0.8; ball.y=from.y;
+  ball.vx=Math.cos(ang)*spd; ball.vy=Math.sin(ang)*spd;
+  log(`${from.name} → passe`);
+}
+function shoot(o,g){
+  ball.owner=null; ball.cd=0.15;
+  const miss=(1-o.attr.shot)*7;                 // erro em metros na trave
+  const ty=GY+(Math.random()-0.5)*2*miss;
+  const dx=g.x-o.x, dy=ty-o.y, d=Math.hypot(dx,dy)||1;
+  ball.x=o.x+fwd(o.team)*0.8; ball.y=o.y;
+  ball.vx=dx/d*30; ball.vy=dy/d*30;
+  log(`${o.name} FINALIZA!`);
+}
+function tryGoal(team){
+  const defTeam = team==="home"?"away":"home";
+  const gk=players.find(p=>p.role==="GOL"&&p.team===defTeam);
+  const save=0.72+gk.attr.tackle*0.18;          // reflexo do goleiro
+  if(Math.random()<save){
+    ball.owner=gk.id; ball.x=gk.x; ball.y=gk.y; ball.vx=ball.vy=0; ball.cd=0.3;
+    log(`🧤 Defesa de ${gk.name}!`);
+  } else goal(team);
+}
+function goal(team){
+  score[team==="home"?"h":"a"]++;
+  log(`⚽ GOL do ${team==="home"?hName():aName()}! (${score.h}-${score.a})`);
+  // saída para o time que sofreu
+  const other=team==="home"?"away":"home";
+  players.forEach(p=>{p.x=p.base.x;p.y=p.base.y;p.vx=p.vy=0;p.decCd=0;});
+  const k=players.find(p=>p.role==="MEI"&&p.team===other);
+  ball.owner=k.id; ball.x=k.x; ball.y=k.y; ball.vx=ball.vy=0; ball.cd=0.3;
+}
+
+/* ============ Render ============ */
+let dots={}, ballDot=null;
+const NS="http://www.w3.org/2000/svg";
+function buildPitch(){
+  const svg=document.getElementById("pitch"); svg.innerHTML="";
+  for(let i=0;i<7;i++){const r=document.createElementNS(NS,"rect");
+    r.setAttribute("x",i*15);r.setAttribute("y",0);r.setAttribute("width",15);r.setAttribute("height",68);
+    r.setAttribute("fill",i%2?"#3a7d3f":"#347439");svg.appendChild(r);}
+  const rect=(x,y,w,h)=>{const e=document.createElementNS(NS,"rect");e.setAttribute("x",x);e.setAttribute("y",y);
+    e.setAttribute("width",w);e.setAttribute("height",h);e.setAttribute("fill","none");
+    e.setAttribute("stroke","rgba(255,255,255,.7)");e.setAttribute("stroke-width",".3");svg.appendChild(e);};
+  const line=(x1,y1,x2,y2)=>{const e=document.createElementNS(NS,"line");e.setAttribute("x1",x1);e.setAttribute("y1",y1);
+    e.setAttribute("x2",x2);e.setAttribute("y2",y2);e.setAttribute("stroke","rgba(255,255,255,.7)");
+    e.setAttribute("stroke-width",".3");svg.appendChild(e);};
+  rect(1,1,103,66); line(52.5,1,52.5,67);
+  const c=document.createElementNS(NS,"circle");c.setAttribute("cx",52.5);c.setAttribute("cy",34);c.setAttribute("r",9.15);
+  c.setAttribute("fill","none");c.setAttribute("stroke","rgba(255,255,255,.7)");c.setAttribute("stroke-width",".3");svg.appendChild(c);
+  rect(1,14,16.5,40); rect(87.5,14,16.5,40); rect(1,24.8,5.5,18.4); rect(98,24.8,5.5,18.4);
+  dots={};
+  for(const p of players){
+    const g=document.createElementNS(NS,"circle");g.setAttribute("r",1.5);
+    g.setAttribute("fill",p.team==="home"?"#2f81f7":"#f0883e");
+    g.setAttribute("stroke","rgba(0,0,0,.4)");g.setAttribute("stroke-width",".3");
+    svg.appendChild(g); dots[p.id]=g;
+  }
+  ballDot=document.createElementNS(NS,"circle");ballDot.setAttribute("r",.85);
+  ballDot.setAttribute("fill","#fff");ballDot.setAttribute("stroke","#000");ballDot.setAttribute("stroke-width",".2");svg.appendChild(ballDot);
+  renderPositions();
+}
+function renderPositions(){
+  for(const p of players){ const g=dots[p.id]; if(g){g.setAttribute("cx",p.x.toFixed(2));g.setAttribute("cy",p.y.toFixed(2));} }
+  if(ballDot){ballDot.setAttribute("cx",ball.x.toFixed(2));ballDot.setAttribute("cy",ball.y.toFixed(2));}
+}
+function updateUI(){
+  document.getElementById("hg").textContent=score.h;
+  document.getElementById("ag").textContent=score.a;
+  const mm=Math.min(90,Math.floor(matchSec/60));
+  document.getElementById("clock").textContent=ended?"Encerrado":mm+"'";
+  const tot=possAcc.h+possAcc.a||1, ph=Math.round(possAcc.h/tot*100);
+  document.getElementById("pH").style.width=ph+"%"; document.getElementById("pA").style.width=(100-ph)+"%";
+  document.getElementById("pHl").textContent="Posse "+ph+"%"; document.getElementById("pAl").textContent=(100-ph)+"%";
+}
+const hName=()=>document.getElementById("hName").textContent;
+const aName=()=>document.getElementById("aName").textContent;
+function log(t){const l=document.getElementById("log");const d=document.createElement("div");
+  const mm=Math.floor(matchSec/60); d.textContent=`${mm}'  ${t}`; l.insertBefore(d,l.firstChild);
+  while(l.children.length>40)l.removeChild(l.lastChild);}
+
+/* ============ Loop ============ */
+function frame(t){
+  if(!playing){lastT=t;return;}
+  const real=Math.min((t-lastT)/1000,0.25); lastT=t;
+  const secPerSec=parseInt(document.getElementById("speed").value,10);
+  let simSec=real*secPerSec, acc=0;
+  while(acc<simSec && !ended){ step(); acc+=DT; }
+  renderPositions(); updateUI();
+  if(!ended) requestAnimationFrame(frame); else { playing=false; document.getElementById("btnPlay").textContent="▶ Iniciar"; }
+}
+function play(){ if(ended)return; playing=true; document.getElementById("btnPlay").textContent="⏸ Pausar";
+  lastT=performance.now(); requestAnimationFrame(frame); }
+function pause(){ playing=false; document.getElementById("btnPlay").textContent="▶ Continuar"; }
+
+document.getElementById("btnPlay").onclick=()=> playing?pause():play();
+document.getElementById("btnReset").onclick=()=>{ pause(); document.getElementById("log").innerHTML=""; newMatch(); updateUI(); };
+newMatch(); updateUI();
+</script>
+</body>
+</html>

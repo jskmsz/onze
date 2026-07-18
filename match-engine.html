@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Onze — Motor de Partida</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2430; --line:#30363d;
+    --txt:#e6edf3; --muted:#8b949e; --accent:#3fb950; --gold:#d29922;
+    --home:#2f81f7; --away:#f0883e; --yellow:#e3b341; --red:#f85149;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    display:flex; justify-content:center; padding:24px;
+  }
+  .app{width:100%; max-width:860px}
+  h1{font-size:20px; margin:0 0 2px; letter-spacing:.5px}
+  h1 span{color:var(--accent)}
+  .sub{color:var(--muted); font-size:13px; margin-bottom:18px}
+
+  .board{
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--line); border-radius:14px; padding:16px 20px;
+    display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:12px;
+  }
+  .team{display:flex; flex-direction:column; gap:4px}
+  .team.away{align-items:flex-end; text-align:right}
+  .badge{width:32px; height:32px; border-radius:8px; display:inline-block; border:2px solid rgba(255,255,255,.15)}
+  .team .name{font-weight:600; font-size:16px}
+  .team .tac{color:var(--muted); font-size:12px}
+  .center{text-align:center; min-width:150px}
+  .score{font-size:38px; font-weight:800; letter-spacing:2px; line-height:1}
+  .clock{margin-top:6px; font-variant-numeric:tabular-nums; font-size:14px; color:var(--gold); font-weight:600}
+  .status{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:2px}
+
+  /* Tabs */
+  .tabs{display:flex; gap:4px; margin:16px 0 0}
+  .tab{background:var(--panel); border:1px solid var(--line); border-bottom:none;
+    padding:9px 18px; border-radius:10px 10px 0 0; cursor:pointer; font-size:13px; color:var(--muted)}
+  .tab.active{background:var(--panel2); color:var(--txt); font-weight:600}
+  .panel{border:1px solid var(--line); border-radius:0 12px 12px 12px; background:var(--panel); padding:16px}
+  .panel.hidden{display:none}
+
+  /* Possession + territory */
+  .possbar{height:26px; border-radius:8px; overflow:hidden; display:flex; font-size:12px; font-weight:700}
+  .possbar .h{background:var(--home); display:flex; align-items:center; padding-left:10px; color:#fff}
+  .possbar .a{background:var(--away); display:flex; align-items:center; justify-content:flex-end; padding-right:10px; color:#3d1c00}
+  .phase{text-align:center; font-size:13px; color:var(--muted); margin:10px 0}
+  .phase b{color:var(--txt)}
+
+  /* Pitch */
+  .pitchwrap{border-radius:10px; overflow:hidden; border:2px solid #2b6b34}
+  svg.pitch{display:block; width:100%; height:auto; background:#3a7d3f}
+
+  /* Mood gauges */
+  .moods{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px}
+  .mood{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px}
+  .mood .top{display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px}
+  .mood .lbl{font-weight:600}
+  .mood .val{color:var(--gold); font-weight:600}
+  .mgauge{height:8px; background:var(--line); border-radius:5px; overflow:hidden}
+  .mgauge > div{height:100%; transition:width .3s, background .3s}
+
+  /* Controls */
+  .controls{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:16px 0;
+    padding:12px; background:var(--panel); border:1px solid var(--line); border-radius:12px}
+  button, select{background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    padding:8px 14px; border-radius:8px; font-size:13px; cursor:pointer; font-weight:500}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent); color:#04260f; border-color:var(--accent); font-weight:700}
+  .controls label{font-size:12px; color:var(--muted); margin-left:auto}
+
+  /* Feed */
+  .feed{max-height:420px; overflow-y:auto; margin:-16px}
+  .ev{display:flex; gap:12px; padding:9px 14px; border-bottom:1px solid var(--line); font-size:14px; align-items:baseline}
+  .ev:last-child{border-bottom:none}
+  .ev .min{color:var(--gold); font-variant-numeric:tabular-nums; font-weight:700; min-width:44px}
+  .ev .ic{min-width:20px; text-align:center}
+  .ev .tx{flex:1}
+  .ev.goal{background:rgba(63,185,80,.10)} .ev.goal .tx{font-weight:700}
+  .ev.big{background:rgba(210,153,34,.08)}
+  @keyframes pop{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none}}
+  .ev{animation:pop .18s ease}
+
+  .stats .row{display:grid; grid-template-columns:60px 1fr auto 1fr 60px; align-items:center; gap:10px; margin:12px 0}
+  .stats .hv{text-align:right; font-weight:600} .stats .av{text-align:left; font-weight:600}
+  .stats .lbl{text-align:center; color:var(--muted); font-size:11px; text-transform:uppercase; min-width:96px}
+  .statbar{height:7px; background:var(--line); border-radius:5px; overflow:hidden; display:flex}
+  .statbar .h{background:var(--home)} .statbar .a{background:var(--away)}
+  .statbar.rev{flex-direction:row-reverse}
+
+  .foot{color:var(--muted); font-size:12px; margin-top:16px; line-height:1.5}
+  .foot code{background:var(--panel2); padding:1px 6px; border-radius:4px; color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1><span>Onze</span> — motor de partida</h1>
+  <div class="sub">Campo (foto do minuto), estatísticas ao vivo e timeline em abas separadas. Clima do time reage ao jogo.</div>
+
+  <div class="board">
+    <div class="team home">
+      <span class="badge" id="hBadge"></span>
+      <span class="name" id="hName">—</span><span class="tac" id="hTac"></span>
+    </div>
+    <div class="center">
+      <div class="score"><span id="hScore">0</span> : <span id="aScore">0</span></div>
+      <div class="clock" id="clock">0'</div><div class="status" id="status">Pronto</div>
+    </div>
+    <div class="team away">
+      <span class="badge" id="aBadge"></span>
+      <span class="name" id="aName">—</span><span class="tac" id="aTac"></span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-t="campo">⚽ Campo</div>
+    <div class="tab" data-t="stats">📊 Estatísticas</div>
+    <div class="tab" data-t="time">📜 Timeline</div>
+  </div>
+
+  <!-- CAMPO -->
+  <div class="panel" id="panel-campo">
+    <div class="possbar"><div class="h" id="possH" style="width:50%">50%</div><div class="a" id="possA" style="width:50%">50%</div></div>
+    <div class="phase" id="phase">Bola no meio-campo</div>
+    <div class="pitchwrap">
+      <svg class="pitch" id="pitch" viewBox="0 0 100 64" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div class="moods">
+      <div class="mood">
+        <div class="top"><span class="lbl" id="mHname">Casa</span><span class="val" id="mHlbl">Focado</span></div>
+        <div class="mgauge"><div id="mHbar" style="width:70%;background:var(--home)"></div></div>
+      </div>
+      <div class="mood">
+        <div class="top"><span class="lbl" id="mAname">Visitante</span><span class="val" id="mAlbl">Focado</span></div>
+        <div class="mgauge"><div id="mAbar" style="width:70%;background:var(--away)"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="panel hidden" id="panel-stats">
+    <div class="stats" id="statsBody"></div>
+  </div>
+
+  <!-- TIMELINE -->
+  <div class="panel hidden" id="panel-time">
+    <div class="feed" id="feed"></div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="btnPlay">▶ Iniciar</button>
+    <button id="btnInstant">⏭ Instantâneo</button>
+    <button id="btnReset">↺ Novo jogo</button>
+    <label for="speed">Ritmo</label>
+    <select id="speed">
+      <option value="1000">Tempo real (lento)</option>
+      <option value="450" selected>Normal 1x</option>
+      <option value="220">Rápido 2x</option>
+      <option value="100">Acelerado 4x</option>
+      <option value="35">Turbo 8x</option>
+    </select>
+  </div>
+
+  <div class="foot">
+    Foto do minuto = formação-base × território (em que campo a jogada está) × ruído. Não é simulação posicional
+    completa — é uma <i>foto coerente</i> com o estado do jogo, barata e bonita. Atributos por jogador, adequação de
+    posição, finanças e comissão técnica entram nas próximas fases.
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   DADOS (virão de JSON no jogo final)
+   ========================================================= */
+const TEAMS = {
+  serrano:{ name:"Atlético Serrano", short:"SER", color:"#2ea043", tactic:"Equilibrado",
+    morale:74, fans:82, context:"título",
+    squad:[
+      {n:"Rildo",pos:"GOL",rat:78},{n:"Juninho",pos:"LAT",rat:72},{n:"Cassiano",pos:"ZAG",rat:80},
+      {n:"Peninha",pos:"ZAG",rat:76},{n:"Val",pos:"LAT",rat:71},{n:"Douglas",pos:"VOL",rat:79},
+      {n:"Ferrugem",pos:"MEI",rat:83},{n:"Tobias",pos:"MEI",rat:75},{n:"Marcinho",pos:"PON",rat:81},
+      {n:"Gilmar",pos:"ATA",rat:85},{n:"Bocão",pos:"ATA",rat:77}]},
+  maritimo:{ name:"Marítimo Azul", short:"MAR", color:"#1f6feb", tactic:"Ofensivo",
+    morale:69, fans:70, context:"meio de tabela",
+    squad:[
+      {n:"Everaldo",pos:"GOL",rat:75},{n:"Piti",pos:"LAT",rat:74},{n:"Adilson",pos:"ZAG",rat:77},
+      {n:"Régis",pos:"ZAG",rat:73},{n:"Naldo",pos:"LAT",rat:76},{n:"Zé Roberto",pos:"VOL",rat:74},
+      {n:"L. Paquetá",pos:"MEI",rat:82},{n:"Danilo",pos:"MEI",rat:78},{n:"Wesley",pos:"PON",rat:84},
+      {n:"Cebola",pos:"ATA",rat:80},{n:"Índio",pos:"ATA",rat:79}]},
+};
+const TACTICS = {
+  "Defensivo":{atk:0.85,def:1.15,tempo:0.90}, "Equilibrado":{atk:1.0,def:1.0,tempo:1.0},
+  "Ofensivo":{atk:1.18,def:0.88,tempo:1.10},
+};
+/* Formação 4-3-3 em coordenadas do campo (viewBox 100x64). Casa ataca p/ direita. */
+const FORMATION = [
+  {pos:"GOL",x:6,y:32},
+  {pos:"LAT",x:24,y:8},{pos:"ZAG",x:22,y:24},{pos:"ZAG",x:22,y:40},{pos:"LAT",x:24,y:56},
+  {pos:"VOL",x:44,y:32},{pos:"MEI",x:46,y:16},{pos:"MEI",x:46,y:48},
+  {pos:"PON",x:66,y:12},{pos:"ATA",x:70,y:32},{pos:"PON",x:66,y:52},
+];
+
+/* =========================================================
+   MOTOR
+   ========================================================= */
+class MatchEngine{
+  constructor(home,away){this.home=home;this.away=away;this.reset();}
+  reset(){
+    this.minute=0; this.stoppage=2+Math.floor(Math.random()*4);
+    this.score={home:0,away:0};
+    this.stats={home:this._blank(),away:this._blank()};
+    this.events=[]; this.finished=false;
+    this.territory=0;                              // -1 (ataque visitante) .. +1 (ataque casa)
+    this.mood={home:this.home.morale,away:this.away.morale};
+    this.ratings={home:this._teamRatings(this.home,true),away:this._teamRatings(this.away,false)};
+  }
+  _blank(){return {shots:0,on:0,fouls:0,yellow:0,red:0,poss:0,corners:0};}
+  _teamRatings(team,isHome){
+    const by=a=>a.length?a.reduce((s,p)=>s+p.rat,0)/a.length:60;
+    const gk=by(team.squad.filter(p=>p.pos==="GOL"));
+    const def=by(team.squad.filter(p=>["ZAG","LAT","VOL"].includes(p.pos)));
+    const mid=by(team.squad.filter(p=>["VOL","MEI"].includes(p.pos)));
+    const atk=by(team.squad.filter(p=>["ATA","PON","MEI"].includes(p.pos)));
+    const t=TACTICS[team.tactic]||TACTICS.Equilibrado;
+    const home=isHome?1+(team.fans/100)*0.10+(team.morale-50)/500:1+(team.morale-50)/700;
+    return {gk,def:def*t.def*home,mid:mid*home,atk:atk*t.atk*home,tempo:t.tempo,
+      aggression:team.tactic==="Ofensivo"?1.15:team.tactic==="Defensivo"?1.2:1.0};
+  }
+  _pick(team){
+    const c=team.squad.filter(p=>["ATA","PON","MEI"].includes(p.pos));
+    const w=c.map(p=>p.rat*(p.pos==="ATA"?1.6:p.pos==="PON"?1.2:0.7));
+    let r=Math.random()*w.reduce((a,b)=>a+b,0);
+    for(let i=0;i<c.length;i++){if((r-=w[i])<=0)return c[i].n;} return c[0].n;
+  }
+  _fouler(team){const c=team.squad.filter(p=>["ZAG","LAT","VOL","MEI"].includes(p.pos));
+    return c[Math.floor(Math.random()*c.length)].n;}
+
+  _nudgeMood(side,amount){
+    this.mood[side]=Math.max(15,Math.min(96,this.mood[side]+amount));
+  }
+  moodLabel(v){return v>78?"Confiante":v>60?"Focado":v>45?"Neutro":v>32?"Tenso":"Nervoso";}
+
+  tick(){
+    if(this.finished)return[];
+    this.minute++; const evs=[]; const rH=this.ratings.home,rA=this.ratings.away;
+    const fat=r=>this.minute>65?1-(this.minute-65)*0.0015:1;
+    const powH=(rH.atk*0.6+rH.mid*0.4)*fat(rH)*(0.85+this.mood.home/300);
+    const powA=(rA.atk*0.6+rA.mid*0.4)*fat(rA)*(0.85+this.mood.away/300);
+    const tot=powH+powA;
+    this.stats.home.poss+=powH/tot; this.stats.away.poss+=powA/tot;
+
+    // território: alvo pela força + ruído; eventos dão picos
+    let target=(powH-powA)/tot*0.6;
+    const tempo=(rH.tempo+rA.tempo)/2;
+    if(Math.random()<0.30*tempo){
+      const homeAtt=Math.random()<powH/tot;
+      const aR=homeAtt?rH:rA, dR=homeAtt?rA:rH, aT=homeAtt?this.home:this.away, side=homeAtt?"home":"away";
+      target=homeAtt?0.85:-0.85;
+      const shotP=aR.atk/(aR.atk+dR.def*0.9);
+      if(Math.random()<shotP){
+        this.stats[side].shots++;
+        const sc=this._pick(aT);
+        if(Math.random()<0.55){
+          this.stats[side].on++;
+          const goalP=0.62*(aR.atk/(aR.atk+dR.gk));
+          if(Math.random()<goalP){
+            this.score[side]++;
+            this._nudgeMood(side,9); this._nudgeMood(side==="home"?"away":"home",-7);
+            evs.push({min:this._clk(),type:"goal",side,ic:"⚽",tx:`GOL do ${aT.name}! ${sc} balança as redes!`});
+            target=0;                                 // recomeça no meio
+          } else evs.push({min:this._clk(),type:"save",side,ic:"🧤",tx:`${sc} finaliza, mas o goleiro defende!`});
+        } else {
+          if(Math.random()<0.4){this.stats[side].corners++;
+            evs.push({min:this._clk(),type:"chance",side,ic:"🚩",tx:`${sc} obriga o zagueiro a mandar para escanteio.`});}
+          else evs.push({min:this._clk(),type:"miss",side,ic:"🎯",tx:`${sc} arrisca e manda por cima.`});
+        }
+      } else if(Math.random()<0.4){
+        const w=this._pick(aT);
+        evs.push({min:this._clk(),type:"chance",side,ic:"⚡",tx:`${aT.name} chega com ${w}, mas a defesa afasta.`});
+      }
+    }
+    // desloca território suavemente
+    this.territory+=(target-this.territory)*0.35+(Math.random()-0.5)*0.22;
+    this.territory=Math.max(-1,Math.min(1,this.territory));
+
+    // faltas / cartões
+    if(Math.random()<0.10){
+      const hf=Math.random()<0.5, side=hf?"home":"away", team=hf?this.home:this.away;
+      this.stats[side].fouls++; const who=this._fouler(team); const agg=this.ratings[side].aggression; const r=Math.random();
+      if(r<0.012*agg){this.stats[side].red++; this._nudgeMood(side,-6);
+        evs.push({min:this._clk(),type:"red",side,ic:"🟥",tx:`VERMELHO para ${who} (${team.name})! Jogo pega fogo.`});}
+      else if(r<0.20*agg){this.stats[side].yellow++;
+        evs.push({min:this._clk(),type:"yellow",side,ic:"🟨",tx:`Amarelo para ${who} (${team.name}).`});}
+    }
+
+    // clima deriva de volta ao "normal" + contexto/torcida (leve)
+    this._nudgeMood("home",(this.home.morale-this.mood.home)*0.02+(this.home.fans-70)*0.002);
+    this._nudgeMood("away",(this.away.morale-this.mood.away)*0.02);
+
+    this.events.push(...evs);
+    if(this.minute===45)evs.push({min:"45'",type:"ht",ic:"⏸",tx:`Intervalo. ${this.home.short} ${this.score.home} x ${this.score.away} ${this.away.short}.`});
+    if(this.minute>=90+this.stoppage){this.finished=true;
+      evs.push({min:"FIM",type:"ft",ic:"🏁",tx:`Fim de jogo! ${this.home.name} ${this.score.home} x ${this.score.away} ${this.away.name}.`});}
+    return evs;
+  }
+  _clk(){return this.minute<=90?this.minute+"'":"90+"+(this.minute-90)+"'";}
+  possession(){const t=this.stats.home.poss+this.stats.away.poss||1;return Math.round(this.stats.home.poss/t*100);}
+}
+
+/* =========================================================
+   UI
+   ========================================================= */
+let engine, timer=null, playing=false, homeDots=[], awayDots=[], ballDot=null;
+const $=id=>document.getElementById(id);
+
+/* Tabs */
+document.querySelectorAll(".tab").forEach(tab=>{
+  tab.onclick=()=>{
+    document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+    tab.classList.add("active");
+    for(const p of ["campo","stats","time"]) $("panel-"+p).classList.toggle("hidden", p!==tab.dataset.t);
+  };
+});
+
+function buildPitch(){
+  const svg=$("pitch"); svg.innerHTML="";
+  const NS="http://www.w3.org/2000/svg";
+  // faixas do gramado
+  for(let i=0;i<10;i++){const r=document.createElementNS(NS,"rect");
+    r.setAttribute("x",i*10);r.setAttribute("y",0);r.setAttribute("width",10);r.setAttribute("height",64);
+    r.setAttribute("fill",i%2?"#3a7d3f":"#347439");svg.appendChild(r);}
+  const line=(x1,y1,x2,y2)=>{const l=document.createElementNS(NS,"line");
+    l.setAttribute("x1",x1);l.setAttribute("y1",y1);l.setAttribute("x2",x2);l.setAttribute("y2",y2);
+    l.setAttribute("stroke","rgba(255,255,255,.7)");l.setAttribute("stroke-width",".4");svg.appendChild(l);};
+  const rect=(x,y,w,h)=>{const r=document.createElementNS(NS,"rect");
+    r.setAttribute("x",x);r.setAttribute("y",y);r.setAttribute("width",w);r.setAttribute("height",h);
+    r.setAttribute("fill","none");r.setAttribute("stroke","rgba(255,255,255,.7)");r.setAttribute("stroke-width",".4");svg.appendChild(r);};
+  rect(1,1,98,62); line(50,1,50,63);
+  const c=document.createElementNS(NS,"circle");c.setAttribute("cx",50);c.setAttribute("cy",32);
+  c.setAttribute("r",9);c.setAttribute("fill","none");c.setAttribute("stroke","rgba(255,255,255,.7)");c.setAttribute("stroke-width",".4");svg.appendChild(c);
+  rect(1,16,16,32); rect(83,16,16,32);          // áreas
+  rect(1,25,6,14);  rect(93,25,6,14);           // pequenas áreas
+  // jogadores
+  const mk=(color)=>{const g=document.createElementNS(NS,"circle");
+    g.setAttribute("r",1.9);g.setAttribute("fill",color);g.setAttribute("stroke","rgba(0,0,0,.35)");g.setAttribute("stroke-width",".3");
+    svg.appendChild(g);return g;};
+  homeDots=FORMATION.map(()=>mk("var(--home)"));
+  awayDots=FORMATION.map(()=>mk("var(--away)"));
+  ballDot=document.createElementNS(NS,"circle");ballDot.setAttribute("r",1.1);
+  ballDot.setAttribute("fill","#fff");ballDot.setAttribute("stroke","#000");ballDot.setAttribute("stroke-width",".2");svg.appendChild(ballDot);
+  renderPitch();
+}
+function renderPitch(){
+  const t=engine?engine.territory:0; const j=()=>(Math.random()-0.5)*2.2;
+  FORMATION.forEach((f,i)=>{
+    // casa
+    let hx=f.x+t*14+j(), hy=f.y+j();
+    homeDots[i].setAttribute("cx",Math.max(3,Math.min(97,hx)));homeDots[i].setAttribute("cy",Math.max(4,Math.min(60,hy)));
+    // visitante espelhado em x
+    let ax=(100-f.x)+t*14+j(), ay=f.y+j();
+    awayDots[i].setAttribute("cx",Math.max(3,Math.min(97,ax)));awayDots[i].setAttribute("cy",Math.max(4,Math.min(60,ay)));
+  });
+  ballDot.setAttribute("cx",Math.max(4,Math.min(96,50+t*40+j())));
+  ballDot.setAttribute("cy",32+j());
+}
+
+function setupBoard(){
+  $("hName").textContent=engine.home.name; $("aName").textContent=engine.away.name;
+  $("hTac").textContent=engine.home.tactic; $("aTac").textContent=engine.away.tactic;
+  $("hBadge").style.background=engine.home.color; $("aBadge").style.background=engine.away.color;
+  $("mHname").textContent=engine.home.short; $("mAname").textContent=engine.away.short;
+}
+function render(){
+  $("hScore").textContent=engine.score.home; $("aScore").textContent=engine.score.away;
+  $("clock").textContent=engine.finished?"Encerrado":engine.minute+"'";
+  const ph=engine.possession(),pa=100-ph;
+  $("possH").style.width=ph+"%"; $("possH").textContent=ph+"%";
+  $("possA").style.width=pa+"%"; $("possA").textContent=pa+"%";
+  // fase
+  const t=engine.territory;
+  $("phase").innerHTML = t>0.18?`<b>${engine.home.name}</b> pressionando`
+    : t<-0.18?`<b>${engine.away.name}</b> pressionando` : "Disputa no meio-campo";
+  // clima
+  const setMood=(side,barId,lblId)=>{const v=Math.round(engine.mood[side]);
+    $(barId).style.width=v+"%"; $(lblId).textContent=engine.moodLabel(v)+" ("+v+")";
+    $(barId).style.background=v<40?"var(--red)":v<60?"var(--gold)":(side==="home"?"var(--home)":"var(--away)");};
+  setMood("home","mHbar","mHlbl"); setMood("away","mAbar","mAlbl");
+  renderPitch();
+  renderStats();
+}
+function renderStats(){
+  const s=engine.stats;
+  const rows=[["Finalizações","shots"],["No alvo","on"],["Escanteios","corners"],["Faltas","fouls"],["Cartões",null]];
+  let html="";
+  for(const [lbl,key] of rows){
+    const hv=key?s.home[key]:s.home.yellow+s.home.red;
+    const av=key?s.away[key]:s.away.yellow+s.away.red;
+    const tot=hv+av||1, hp=Math.round(hv/tot*100);
+    html+=`<div class="row"><div class="hv">${hv}</div>
+      <div class="statbar"><div class="h" style="width:${hp}%"></div><div class="a" style="width:${100-hp}%"></div></div>
+      <div class="lbl">${lbl}</div>
+      <div class="statbar rev"><div class="a" style="width:${100-hp}%"></div><div class="h" style="width:${hp}%"></div></div>
+      <div class="av">${av}</div></div>`;
+  }
+  $("statsBody").innerHTML=html;
+}
+function pushEvents(evs){
+  const feed=$("feed");
+  for(const e of evs){
+    const div=document.createElement("div");
+    let cls="ev"; if(e.type==="goal")cls+=" goal"; if(["ht","ft","red"].includes(e.type))cls+=" big";
+    div.className=cls;
+    div.innerHTML=`<span class="min">${e.min}</span><span class="ic">${e.ic}</span><span class="tx">${e.tx}</span>`;
+    feed.insertBefore(div,feed.firstChild);
+  }
+}
+function step(){
+  const evs=engine.tick(); pushEvents(evs); render();
+  if(engine.finished){stop(); $("status").textContent="Encerrado"; $("btnPlay").textContent="▶ Iniciar";}
+}
+function loop(){if(!playing)return; step(); if(!engine.finished){timer=setTimeout(loop,parseInt($("speed").value,10));}}
+function play(){if(engine.finished)return; playing=true; $("btnPlay").textContent="⏸ Pausar"; $("status").textContent="Em andamento"; loop();}
+function stop(){playing=false; if(timer)clearTimeout(timer); $("btnPlay").textContent="▶ Continuar";}
+function instant(){stop(); while(!engine.finished)engine.tick();
+  $("feed").innerHTML=""; pushEvents(engine.events.concat([{min:"FIM",type:"ft",ic:"🏁",
+    tx:`Fim de jogo! ${engine.home.name} ${engine.score.home} x ${engine.score.away} ${engine.away.name}.`}]).reverse());
+  render(); $("status").textContent="Encerrado";}
+function newGame(){
+  stop(); engine=new MatchEngine(TEAMS.serrano,TEAMS.maritimo);
+  setupBoard(); buildPitch(); render();
+  $("feed").innerHTML=""; $("status").textContent="Pronto"; $("btnPlay").textContent="▶ Iniciar";
+  pushEvents([{min:"0'",type:"ht",ic:"🟢",tx:`Bola rolando no ${engine.home.name}! Casa cheia, torcida empurrando.`}]);
+}
+$("btnPlay").onclick=()=>playing?stop():play();
+$("btnInstant").onclick=instant;
+$("btnReset").onclick=newGame;
+newGame();
+</script>
+</body>
+</html>

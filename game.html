@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Onze — Temporada</title>
+<link rel="stylesheet" href="css/game.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- MENU PRINCIPAL -->
+  <div id="screen-menu">
+    <div class="menu">
+      <h1><span>Onze</span></h1>
+      <div class="sub">Ligue de Dournéa · simulador de gestão de futebol</div>
+      <button class="primary" id="mNew">▶ Novo jogo</button>
+      <button id="mContinue" disabled>📂 Continuar carreira</button>
+      <button id="mImport">⤒ Importar save (.json)</button>
+      <div id="mSaveInfo" class="sub" style="margin-top:6px"></div>
+    </div>
+  </div>
+
+  <!-- ESCOLHA DE CLUBE -->
+  <div id="screen-start" class="hidden">
+    <h1><span>Onze</span> — Ligue de Dournéa</h1>
+    <div class="sub">Dournéa é uma nação fictícia de fala bretã e francesa, com forte herança celta. Escolha entre os 16 clubes da liga nacional quem você vai comandar.</div>
+    <div id="continueBox"></div>
+    <div class="clubgrid" id="clubGrid"></div>
+    <div style="margin-top:14px"><button id="backToMenu">← Voltar ao menu</button></div>
+  </div>
+
+  <!-- TELA PRINCIPAL -->
+  <div id="screen-main" class="hidden">
+    <div class="hdr">
+      <span class="badge" id="hBadge"></span>
+      <div>
+        <div class="club" id="hClub">—</div>
+        <div class="meta" id="hMeta">—</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="money">
+        <div class="meta">Caixa</div>
+        <div class="v" id="hMoney">R$ 0</div>
+      </div>
+      <div class="sysbtns">
+        <button id="btnSave" title="Salvar jogo">💾</button>
+        <button id="btnExport" title="Exportar save (.json)">⤓</button>
+        <button id="btnImport" title="Importar save (.json)">⤒</button>
+        <button id="btnMenu" title="Voltar ao menu">☰</button>
+        <input type="file" id="importFile" accept="application/json" hidden>
+      </div>
+      <button class="primary" id="btnAdvance">Avançar rodada ▶</button>
+    </div>
+
+    <div class="nav" id="nav">
+      <div class="tab active" data-v="tabela">🏆 Tabela</div>
+      <div class="tab" data-v="calendario">📅 Calendário</div>
+      <div class="tab" data-v="elenco">👥 Elenco</div>
+      <div class="tab" data-v="escalacao">🎽 Escalação</div>
+      <div class="tab" data-v="treino">🏃 Treino</div>
+      <div class="tab" data-v="mercado">💱 Mercado</div>
+      <div class="tab" data-v="financas">💰 Finanças</div>
+    </div>
+    <div class="view" id="view"></div>
+  </div>
+
+</div>
+
+<div id="modalHost"></div>
+
+<!-- Aviso: aberto via file:// os módulos ES não carregam e o jogo fica "morto".
+     Este script é proposital NÃO-module, para rodar mesmo assim. -->
+<script>
+if (location.protocol === "file:") {
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelector(".app").innerHTML =
+      '<div class="filewarn">' +
+      '<h1>⚠️ Abra o jogo pelo servidor local</h1>' +
+      '<p>Você abriu o <b>game.html</b> direto do arquivo (<code>file://</code>). O navegador ' +
+      '<b>bloqueia</b> o carregamento dos módulos do jogo assim — por isso os botões não funcionam.</p>' +
+      '<h3>Jeito fácil</h3>' +
+      '<p>Dê dois cliques em <code>Jogar Onze.bat</code> (na mesma pasta). Ele liga o servidor e abre o jogo sozinho.</p>' +
+      '<h3>Jeito manual</h3>' +
+      '<p>Abra o Prompt de Comando na pasta <code>onze</code> e rode:</p>' +
+      '<pre>python -m http.server 8123</pre>' +
+      '<p>Depois acesse <a href="http://localhost:8123/game.html">http://localhost:8123/game.html</a></p>' +
+      '</div>';
+  });
+}
+</script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

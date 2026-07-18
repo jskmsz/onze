@@ -1,0 +1,13 @@
+# Sistema operacional
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Saves exportados manualmente (o save principal fica no IndexedDB do navegador)
+saves/
+*.save.json
