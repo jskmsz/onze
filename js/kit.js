@@ -11,11 +11,12 @@ export const KIT_TEMPLATES = {
   lisa: {l:"Gola careca", src:"assets/kits/base-lisa.png"},
   gola: {l:"Com gola polo", src:"assets/kits/base-gola.png"},
 };
-/* caixas normalizadas de cada peça dentro da imagem base */
+/* caixas normalizadas de cada peça — medidas nos PNGs reais (1888x2222):
+   camisa x0–0.54 / y0–0.613 · meião x0.545–0.98 / y0.07–0.595 · calção y0.60–0.98 */
 export const REGIONS = {
-  shirt:  {x:0.000, y:0.000, w:0.565, h:0.745},
-  socks:  {x:0.585, y:0.000, w:0.415, h:0.615},
-  shorts: {x:0.520, y:0.600, w:0.480, h:0.400},
+  shirt:  {x:0.000, y:0.000, w:0.545, h:0.630},
+  socks:  {x:0.545, y:0.000, w:0.455, h:0.602},
+  shorts: {x:0.545, y:0.602, w:0.455, h:0.398},
 };
 export const PATTERNS = {
   solid:  "Lisa",
@@ -26,9 +27,9 @@ export const PATTERNS = {
   center: "Faixa central",
 };
 export const BADGE_POS = {
-  esq:  {l:"Peito esquerdo", x:0.180, y:0.235, size:0.078},
-  dir:  {l:"Peito direito",  x:0.370, y:0.235, size:0.078},
-  meio: {l:"Meio do peito",  x:0.275, y:0.215, size:0.090},
+  esq:  {l:"Peito esquerdo", x:0.175, y:0.160, size:0.070},
+  dir:  {l:"Peito direito",  x:0.368, y:0.160, size:0.070},
+  meio: {l:"Meio do peito",  x:0.270, y:0.150, size:0.080},
 };
 
 /* kit padrão de um clube novo */
@@ -39,7 +40,7 @@ export const defaultKitDesign = (club, alt=false) => ({
   shorts: alt ? "#f5f7fa" : "#ffffff",
   socks: alt ? "#f5f7fa" : (club.color||"#1f6feb"),
   detail:"#ffffff",
-  badge:"esq",
+  badge:"dir",              // à direita p/ não colidir com o logo do fornecedor
   logoTint:{},          // slotKey -> cor forçada do logo (ou null = cor da marca)
 });
 

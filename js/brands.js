@@ -12,23 +12,25 @@ export const REACH_PT = {local:"Local", regional:"Regional", nacional:"Nacional"
 /* ---------- Slots: onde o logo aparece e quanto isso vale ----------
    `w` = peso do slot (predominância). pos/size são normalizados (0-1)
    sobre a imagem do uniforme, usados pelo editor de kit.               */
+/* pos/size normalizados sobre a IMAGEM inteira do uniforme (medidos no PNG real:
+   camisa ocupa x0–0.54 e y0–0.613; calção fica em x0.545–0.99 / y0.60–0.98) */
 export const SPONSOR_SLOTS = {
   material:{l:"Fornecedor de material", w:0.85, kind:"supplier",
-            pos:{x:0.150,y:0.150}, size:0.060, area:"shirt"},
+            pos:{x:0.170,y:0.158}, size:0.058, area:"shirt"},
   frente:  {l:"Máster (peito)",         w:1.00, kind:"sponsor",
-            pos:{x:0.275,y:0.360}, size:0.215, area:"shirt"},
+            pos:{x:0.270,y:0.300}, size:0.210, area:"shirt"},
   meio:    {l:"Meio do peito",          w:0.60, kind:"sponsor",
-            pos:{x:0.275,y:0.255}, size:0.130, area:"shirt"},
+            pos:{x:0.270,y:0.232}, size:0.125, area:"shirt"},
   baixo:   {l:"Barra do peito",         w:0.42, kind:"sponsor",
-            pos:{x:0.275,y:0.520}, size:0.115, area:"shirt"},
+            pos:{x:0.270,y:0.440}, size:0.110, area:"shirt"},
   ombro:   {l:"Linha do ombro",         w:0.34, kind:"sponsor",
-            pos:{x:0.275,y:0.115}, size:0.100, area:"shirt"},
+            pos:{x:0.270,y:0.108}, size:0.095, area:"shirt"},
   mangaE:  {l:"Manga esquerda",         w:0.30, kind:"sponsor",
-            pos:{x:0.072,y:0.300}, size:0.072, area:"shirt"},
+            pos:{x:0.062,y:0.242}, size:0.068, area:"shirt"},
   mangaD:  {l:"Manga direita",          w:0.30, kind:"sponsor",
-            pos:{x:0.478,y:0.300}, size:0.072, area:"shirt"},
+            pos:{x:0.480,y:0.242}, size:0.068, area:"shirt"},
   calcao:  {l:"Calção",                 w:0.28, kind:"sponsor",
-            pos:{x:0.700,y:0.800}, size:0.085, area:"shorts"},
+            pos:{x:0.770,y:0.790}, size:0.085, area:"shorts"},
   naming:  {l:"Naming rights do estádio", w:1.30, kind:"stadium"},
   placas:  {l:"Placas de publicidade",    w:0.55, kind:"stadium"},
 };
