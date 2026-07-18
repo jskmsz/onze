@@ -3,14 +3,35 @@
    Save/load em IndexedDB (aguenta centenas de MB, inclusive imagens de
    camisa em dataURL) + exportar/importar arquivo .json.
    ===================================================================== */
-const DB="onze-db", STORE="saves", VER=1;
+const DB="onze-db", STORE="saves", DATA="data", VER=2;
 
 function openDB(){
   return new Promise((res,rej)=>{
     const r=indexedDB.open(DB,VER);
-    r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE); };
+    r.onupgradeneeded=()=>{
+      const db=r.result;
+      if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      if(!db.objectStoreNames.contains(DATA))  db.createObjectStore(DATA);
+    };
     r.onsuccess=()=>res(r.result);
     r.onerror=()=>rej(r.error);
+  });
+}
+/* ---- dados globais do jogo (banco de marcas etc), separados do save ---- */
+export async function putData(key, value){
+  const db=await openDB();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction(DATA,"readwrite");
+    tx.objectStore(DATA).put(value, key);
+    tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error);
+  });
+}
+export async function getData(key){
+  const db=await openDB();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction(DATA,"readonly");
+    const rq=tx.objectStore(DATA).get(key);
+    rq.onsuccess=()=>res(rq.result??null); rq.onerror=()=>rej(rq.error);
   });
 }
 export async function saveGame(world, slot="auto"){

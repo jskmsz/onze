@@ -78,6 +78,78 @@ export const BRANDS = [
   B("lanbar",  "Bar Lannedis",      "LAN-BAR","#7c2d12", 15, "local",       "dou", 14, "sponsor"),
 ];
 export const brandById = id => BRANDS.find(b=>b.id===id);
+/* cópia dos placeholders, para poder "restaurar padrão" */
+export const BUILTIN_BRANDS = BRANDS.map(b=>({...b}));
+
+/* ---------- Banco de marcas: normalizar, importar, exportar ----------
+   Para MUITAS marcas (centenas/milhares) o ideal é o logo ser um ARQUIVO
+   (`logo:"assets/brands/logos/x.png"`) e não um data-URI: o save continua
+   pequeno e só os logos realmente usados são carregados.               */
+export const BRAND_FIELDS = ["id","name","short","kind","prestige","reach","country","size","color","logo","sector"];
+
+const slug = s => String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
+  .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"").slice(0,40);
+
+export function normalizeBrand(raw, i=0){
+  const num=(v,d)=>{ const n=Number(v); return Number.isFinite(n)?Math.max(1,Math.min(100,n)):d; };
+  const name=String(raw.name||raw.nome||("Marca "+(i+1))).trim();
+  const reach=String(raw.reach||raw.alcance||"nacional").toLowerCase().trim();
+  const kind=String(raw.kind||raw.tipo||"sponsor").toLowerCase().trim();
+  return {
+    id: slug(raw.id||name)|| ("marca"+i),
+    name,
+    short: String(raw.short||raw.sigla||name).toUpperCase().slice(0,12),
+    kind: kind==="supplier"||kind==="material"||kind==="fornecedor" ? "supplier" : "sponsor",
+    prestige: num(raw.prestige??raw.prestigio, 50),
+    reach: REACH_ORDER.includes(reach) ? reach : "nacional",
+    country: String(raw.country||raw.pais||"dou").toLowerCase().trim(),
+    size: num(raw.size??raw.porte, 50),
+    color: String(raw.color||raw.cor||"#334155"),
+    logo: raw.logo ? String(raw.logo) : null,     // caminho de arquivo OU data-URI
+    sector: raw.sector||raw.setor||"",
+  };
+}
+/* troca o banco inteiro mantendo a MESMA referência do array
+   (core.js e app.js importam BRANDS estaticamente) */
+export function setBrands(list){
+  const norm=(list||[]).map(normalizeBrand).filter(b=>b.name);
+  const seen=new Set(); const out=[];
+  for(const b of norm){ let id=b.id, n=2;
+    while(seen.has(id)) id=b.id+"-"+(n++);
+    seen.add(id); out.push({...b, id});
+  }
+  BRANDS.length=0; out.forEach(b=>BRANDS.push(b));
+  return BRANDS.length;
+}
+export const brandsToJSON = () => JSON.stringify(BRANDS, null, 1);
+
+/* ---- CSV (para editar centenas de marcas numa planilha) ---- */
+export function brandsToCSV(){
+  const esc=v=>{ const s=String(v??""); return /[",;\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  return [BRAND_FIELDS.join(",")]
+    .concat(BRANDS.map(b=>BRAND_FIELDS.map(f=>esc(b[f])).join(",")))
+    .join("\n");
+}
+export function parseBrandsCSV(text){
+  const rows=[]; let row=[], cell="", q=false;
+  const s=String(text).replace(/\r\n?/g,"\n");
+  for(let i=0;i<s.length;i++){
+    const ch=s[i];
+    if(q){
+      if(ch==='"' && s[i+1]==='"'){ cell+='"'; i++; }
+      else if(ch==='"') q=false;
+      else cell+=ch;
+    } else if(ch==='"') q=true;
+    else if(ch===","||ch===";"){ row.push(cell); cell=""; }
+    else if(ch==="\n"){ row.push(cell); rows.push(row); row=[]; cell=""; }
+    else cell+=ch;
+  }
+  if(cell||row.length){ row.push(cell); rows.push(row); }
+  if(!rows.length) return [];
+  const head=rows.shift().map(h=>h.trim().toLowerCase());
+  return rows.filter(r=>r.some(c=>String(c).trim()))
+    .map(r=>{ const o={}; head.forEach((h,i)=>o[h]=String(r[i]??"").trim()); return o; });
+}
 
 /* Logo: se a marca tiver PNG enviado usa ele; senão gera um wordmark SVG
    (fundo transparente, recolorível — é o mesmo contrato de um PNG seu). */

@@ -18,7 +18,26 @@ const qualWord = q => q>=80?"Excelente":q>=65?"Bom":q>=50?"Regular":q>=35?"Fraco
 function showScreen(name){
   for(const s of ["menu","start","main"]) $("screen-"+s).classList.toggle("hidden", s!==name);
 }
+/* Banco de marcas: IndexedDB (editado no jogo) → arquivo → embutido */
+let brandSrc="embutido";
+async function loadBrands(){
+  try{
+    const saved=await S.getData("brands");
+    if(saved && saved.length){ BR.setBrands(saved); brandSrc="editor (IndexedDB)"; return; }
+  }catch(e){}
+  try{
+    const r=await fetch("assets/brands/brands.json",{cache:"no-cache"});
+    if(r.ok){
+      const j=await r.json(); const list=Array.isArray(j)?j:j.brands;
+      if(list && list.length){ BR.setBrands(list); brandSrc="assets/brands/brands.json"; return; }
+    }
+  }catch(e){}
+  brandSrc="embutido (placeholders)";
+}
+const saveBrands = ()=> S.putData("brands", BR.BRANDS).catch(()=>{});
+
 async function boot(){
+  await loadBrands();
   showScreen("menu");
   try{
     const s=await S.loadGame();
@@ -515,6 +534,158 @@ function buildKitControls(c, v){
     buildKitControls(c,v); paintKit(c); });
 }
 
+/* ---------- Editor do banco de marcas ---------- */
+let beFilter="", beKind="", beEditing=null, bePage=0;
+const BE_PAGE=60;
+function openBrandEditor(){
+  const host=$("modalHost");
+  const modal=el("div","modal");
+  modal.innerHTML=`<div class="box brandbox">
+    <button class="close" id="beClose">✕ Fechar</button>
+    <h2>Banco de marcas</h2>
+    <div class="sub" id="beInfo"></div>
+    <div class="be-bar">
+      <input id="beSearch" placeholder="Buscar marca..." value="${beFilter}">
+      <select id="beKind">
+        <option value="">Todos</option>
+        <option value="sponsor" ${beKind==="sponsor"?"selected":""}>Patrocinadores</option>
+        <option value="supplier" ${beKind==="supplier"?"selected":""}>Fornecedores</option>
+      </select>
+      <button class="primary" id="beNew">+ Nova marca</button>
+      <button id="beImport">⤒ Importar CSV/JSON</button>
+      <button id="beCsv">⤓ CSV</button>
+      <button id="beJson">⤓ JSON</button>
+      <button id="beReset" title="Volta aos placeholders">↺</button>
+      <input type="file" id="beFile" accept=".csv,.json,text/csv,application/json" hidden>
+    </div>
+    <div class="be-body"><div class="be-list" id="beList"></div><div class="be-form" id="beForm"></div></div>
+  </div>`;
+  host.appendChild(modal);
+  $("beClose").onclick=()=>{ host.innerHTML=""; beEditing=null; };
+  $("beSearch").oninput=e=>{ beFilter=e.target.value; bePage=0; drawBrandList(); };
+  $("beKind").onchange=e=>{ beKind=e.target.value; bePage=0; drawBrandList(); };
+  $("beNew").onclick=()=>{ beEditing={__new:true, id:"", name:"", short:"", kind:"sponsor",
+    prestige:50, reach:"nacional", country:"dou", size:50, color:"#334155", logo:null, sector:""};
+    drawBrandForm(); };
+  $("beImport").onclick=()=>$("beFile").click();
+  $("beFile").onchange=async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const txt=await f.text();
+    let list=[];
+    try{
+      if(/\.json$/i.test(f.name) || txt.trim().startsWith("[") || txt.trim().startsWith("{")){
+        const j=JSON.parse(txt); list=Array.isArray(j)?j:(j.brands||[]);
+      } else list=BR.parseBrandsCSV(txt);
+    }catch(err){ toast("Arquivo inválido: "+err.message); return; }
+    if(!list.length){ toast("Nenhuma marca encontrada no arquivo"); return; }
+    const n=BR.setBrands(list); await saveBrands(); brandSrc="importado ("+f.name+")";
+    toast(`${n} marcas importadas`); bePage=0; drawBrandList(); drawBrandInfo();
+  };
+  $("beCsv").onclick=()=>downloadText(BR.brandsToCSV(),"marcas.csv","text/csv");
+  $("beJson").onclick=()=>downloadText(BR.brandsToJSON(),"brands.json","application/json");
+  $("beReset").onclick=async()=>{ BR.setBrands(BR.BUILTIN_BRANDS); await saveBrands();
+    brandSrc="embutido (placeholders)"; toast("Banco restaurado"); drawBrandList(); drawBrandInfo(); };
+  drawBrandInfo(); drawBrandList(); drawBrandForm();
+}
+function downloadText(text,name,mime){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([text],{type:mime}));
+  a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function drawBrandInfo(){
+  const el2=$("beInfo"); if(!el2) return;
+  const sup=BR.BRANDS.filter(b=>b.kind==="supplier").length;
+  el2.innerHTML=`<b>${BR.BRANDS.length}</b> marcas (${sup} fornecedores) · origem: <b>${brandSrc}</b>.
+    Para centenas de marcas, prefira <code>logo</code> como <b>caminho de arquivo</b>
+    (ex.: <code>assets/brands/logos/nike.png</code>) em vez de imagem enviada — o save fica pequeno.`;
+}
+function brandMatches(b){
+  const q=beFilter.trim().toLowerCase();
+  if(beKind && b.kind!==beKind) return false;
+  if(!q) return true;
+  return (b.name+" "+b.short+" "+(b.sector||"")+" "+b.country).toLowerCase().includes(q);
+}
+function drawBrandList(){
+  const box=$("beList"); if(!box) return;
+  const all=BR.BRANDS.filter(brandMatches);
+  const start=bePage*BE_PAGE, page=all.slice(start,start+BE_PAGE);
+  box.innerHTML = page.map(b=>`
+    <div class="be-row ${beEditing&&beEditing.id===b.id?"sel":""}" data-id="${b.id}">
+      <img src="${BR.brandLogo(b)}" alt="">
+      <span class="nm">${b.name}</span>
+      <span class="mt">${b.kind==="supplier"?"material":BR.REACH_PT[b.reach]}</span>
+      <span class="mt">P${b.prestige}·T${b.size}</span>
+      <button data-del="${b.id}" title="Excluir">✕</button>
+    </div>`).join("") || `<div class="sub" style="padding:10px">Nenhuma marca encontrada.</div>`;
+  if(all.length>BE_PAGE){
+    box.insertAdjacentHTML("beforeend",
+      `<div class="be-pg"><button id="bePrev" ${bePage?"":"disabled"}>◀</button>
+       <span>${start+1}–${Math.min(start+BE_PAGE,all.length)} de ${all.length}</span>
+       <button id="beNext" ${start+BE_PAGE<all.length?"":"disabled"}>▶</button></div>`);
+    $("bePrev").onclick=()=>{ bePage--; drawBrandList(); };
+    $("beNext").onclick=()=>{ bePage++; drawBrandList(); };
+  }
+  box.querySelectorAll(".be-row").forEach(r=> r.onclick=e=>{
+    if(e.target.dataset.del) return;
+    beEditing={...BR.brandById(r.dataset.id)}; drawBrandForm(); drawBrandList();
+  });
+  box.querySelectorAll("[data-del]").forEach(b=> b.onclick=async ev=>{
+    ev.stopPropagation();
+    const id=b.dataset.del;
+    BR.setBrands(BR.BRANDS.filter(x=>x.id!==id));
+    await saveBrands(); toast("Marca excluída");
+    if(beEditing&&beEditing.id===id) beEditing=null;
+    drawBrandList(); drawBrandForm(); drawBrandInfo();
+  });
+}
+function drawBrandForm(){
+  const box=$("beForm"); if(!box) return;
+  const b=beEditing;
+  if(!b){ box.innerHTML=`<div class="sub">Clique numa marca para editar, ou <b>+ Nova marca</b>.</div>`; return; }
+  const reachOpts=BR.REACH_ORDER.map(r=>`<option value="${r}" ${b.reach===r?"selected":""}>${BR.REACH_PT[r]}</option>`).join("");
+  box.innerHTML=`
+    <div class="be-prev"><img src="${BR.brandLogo(b)}" alt=""></div>
+    <div class="row2"><label>Nome</label><input id="bfName" value="${(b.name||"").replace(/"/g,"&quot;")}"></div>
+    <div class="row2"><label>Sigla</label><input id="bfShort" value="${(b.short||"").replace(/"/g,"&quot;")}"></div>
+    <div class="row2"><label>Tipo</label><select id="bfKind">
+      <option value="sponsor" ${b.kind==="sponsor"?"selected":""}>Patrocinador</option>
+      <option value="supplier" ${b.kind==="supplier"?"selected":""}>Fornecedor de material</option></select></div>
+    <div class="row2"><label>Alcance</label><select id="bfReach">${reachOpts}</select></div>
+    <div class="row2"><label>País</label><input id="bfCountry" value="${b.country||"dou"}" style="max-width:90px"></div>
+    <div class="row2"><label>Setor</label><input id="bfSector" value="${(b.sector||"").replace(/"/g,"&quot;")}"></div>
+    <div class="row2"><label>Prestígio ${b.prestige}</label><input type="range" id="bfPrest" min="1" max="100" value="${b.prestige}"></div>
+    <div class="row2"><label>Porte ${b.size}</label><input type="range" id="bfSize" min="1" max="100" value="${b.size}"></div>
+    <div class="row2"><label>Cor</label><input type="color" id="bfColor" value="${/^#[0-9a-f]{6}$/i.test(b.color||"")?b.color:"#334155"}"></div>
+    <div class="row2"><label>Logo (caminho)</label><input id="bfLogoPath" placeholder="assets/brands/logos/x.png"
+      value="${b.logo && !String(b.logo).startsWith("data:") ? b.logo : ""}"></div>
+    <div class="shirt-upload"><label>ou enviar imagem (PNG com transparência)</label>
+      <input type="file" id="bfLogoFile" accept="image/*">
+      ${b.logo?'<button id="bfLogoClear" style="margin-top:6px">Remover logo</button>':''}</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="primary" id="bfSave">${b.__new?"Criar":"Salvar"}</button>
+      <button id="bfCancel">Cancelar</button></div>`;
+  const g=id=>$(id).value;
+  $("bfPrest").oninput=e=>{ b.prestige=+e.target.value; e.target.previousElementSibling.textContent="Prestígio "+b.prestige; };
+  $("bfSize").oninput=e=>{ b.size=+e.target.value; e.target.previousElementSibling.textContent="Porte "+b.size; };
+  $("bfLogoFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return;
+    const rd=new FileReader(); rd.onload=()=>{ b.logo=rd.result; drawBrandForm(); }; rd.readAsDataURL(f); };
+  if($("bfLogoClear")) $("bfLogoClear").onclick=()=>{ b.logo=null; drawBrandForm(); };
+  $("bfCancel").onclick=()=>{ beEditing=null; drawBrandForm(); drawBrandList(); };
+  $("bfSave").onclick=async()=>{
+    const path=g("bfLogoPath").trim();
+    const upd={ id:b.id, name:g("bfName").trim(), short:g("bfShort").trim(), kind:g("bfKind"),
+      reach:g("bfReach"), country:g("bfCountry").trim()||"dou", sector:g("bfSector").trim(),
+      prestige:+$("bfPrest").value, size:+$("bfSize").value, color:g("bfColor"),
+      logo: path || (b.logo && String(b.logo).startsWith("data:") ? b.logo : null) };
+    if(!upd.name){ toast("Dê um nome à marca"); return; }
+    const list=BR.BRANDS.map(x=>x.id===b.id && !b.__new ? upd : x);
+    if(b.__new) list.push(upd);
+    BR.setBrands(list); await saveBrands();
+    toast(b.__new?"Marca criada":"Marca salva");
+    beEditing=null; drawBrandList(); drawBrandForm(); drawBrandInfo();
+  };
+}
+
 /* ---------- Treino ---------- */
 const PROF_PT = {defense:"Defesa", attack:"Ataque", possession:"Posse e passe",
   setPieces:"Bolas paradas", penalties:"Pênaltis"};
@@ -844,7 +1015,9 @@ function renderSponsor(body){
     <div class="line"><span>Receita de patrocínio</span><span class="pos">${brl(total)}/rodada</span></div>
     <div class="line"><span>Com marketing (+${Math.round((eff.sponsorMult-1)*100)}%)</span><span class="pos">${brl(total*eff.sponsorMult)}/rodada</span></div>
     <div class="sub" style="margin-top:6px">Seu clube é <b>${BR.REACH_PT[rk]}</b> (${starsHTML(c.prestige)}).
-      Marcas só negociam com clubes de alcance parecido — e slots mais visíveis pagam mais.</div></div>`;
+      Marcas só negociam com clubes de alcance parecido — e slots mais visíveis pagam mais.</div>
+    <div style="margin-top:8px"><button id="spBrands">🏷️ Banco de marcas (${BR.BRANDS.length})</button>
+      <button id="spRefresh" style="margin-left:6px">↻ Novas propostas</button></div></div>`;
 
   for(const key of BR.SLOT_KEYS){
     const S=BR.SPONSOR_SLOTS[key], ct=(c.sponsors||{})[key];
@@ -868,6 +1041,8 @@ function renderSponsor(body){
     html+=`</div>`;
   }
   body.innerHTML=html;
+  $("spBrands").onclick=()=>openBrandEditor();
+  $("spRefresh").onclick=()=>{ c.sponsorOffers=BR.makeOffers(c, rk); toast("Propostas renovadas"); renderFinance($("view")); };
   body.querySelectorAll("[data-sign]").forEach(btn=> btn.onclick=()=>{
     const key=btn.dataset.sign, o=c.sponsorOffers[key][+btn.dataset.i];
     BR.signSponsor(c,key,o);
@@ -1355,6 +1530,7 @@ $("mContinue").onclick=async()=>{
   catch(e){ toast("Erro ao carregar"); }
 };
 $("mImport").onclick=()=> $("importFile").click();
+$("mBrands").onclick=()=> openBrandEditor();
 $("backToMenu").onclick=()=>{ showScreen("menu"); boot(); };
 $("btnMenu").onclick=async()=>{
   try{ await S.saveGame(world); toast("Jogo salvo"); }catch(e){}
